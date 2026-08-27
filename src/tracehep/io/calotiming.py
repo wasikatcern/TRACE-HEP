@@ -13,7 +13,7 @@ Developed by Wasikul Islam, PhD.
 """
 
 import math
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from ..models import Jet, Track, TruthVertex, Vertex, VertexEvent
 
@@ -27,11 +27,10 @@ _BRANCHES = [
     "averageInteractionsPerCrossing",
 ]
 
-_JET_BRANCHES = [
-    "AntiKt4EMTopoJets_pt", "AntiKt4EMTopoJets_eta", "AntiKt4EMTopoJets_phi",
-    "AntiKt4EMTopoJets_track_idx",
-    "Track_pt", "Track_z0", "Track_var_z0",
-]
+_JET_TRACK_IDX_CANDIDATES = ["track_idx", "ghostTrack_idx"]
+"""Different ntuple productions name a jet's constituent-track association
+differently -- ``{collection}_track_idx`` in some, ``{collection}_ghostTrack_idx``
+(ATLAS ghost-association) in others. match_jets_to_vertex tries each in turn."""
 
 
 def _require_uproot():
@@ -109,6 +108,8 @@ def match_jets_to_vertex(
     vtx_z: float,
     *,
     tree_name: str = "ntuple",
+    jet_collection: str = "AntiKt4EMTopoJets",
+    track_idx_branch: Optional[str] = None,
     jet_pt_min: float = 30.0,
     rpt_min: float = 0.02,
     sig_cut: float = 3.0,
@@ -122,6 +123,17 @@ def match_jets_to_vertex(
     like this is analysis-specific, unlike everything :func:`plot_vertex_detail`
     draws.
 
+    Parameters
+    ----------
+    jet_collection:
+        Branch-name prefix for the jet collection, e.g. "AntiKt4EMTopoJets"
+        (default) or "AntiKt4EMPFlowJets".
+    track_idx_branch:
+        Full branch name for the jet's constituent-track indices. If
+        omitted, tries ``"{jet_collection}_track_idx"`` then
+        ``"{jet_collection}_ghostTrack_idx"`` (different ntuple productions
+        use different names for the same jet-to-track association).
+
     Returns
     -------
     list of tracehep.models.Jet, each with pt >= jet_pt_min and
@@ -130,17 +142,35 @@ def match_jets_to_vertex(
     uproot = _require_uproot()
     f = uproot.open(path)
     tree = f[tree_name]
-    arrs = tree.arrays(_JET_BRANCHES, entry_start=event_index, entry_stop=event_index + 1)
+    available = set(tree.keys())
+
+    if track_idx_branch is None:
+        for candidate in _JET_TRACK_IDX_CANDIDATES:
+            name = f"{jet_collection}_{candidate}"
+            if name in available:
+                track_idx_branch = name
+                break
+        else:
+            tried = ", ".join(f"{jet_collection}_{c}" for c in _JET_TRACK_IDX_CANDIDATES)
+            raise KeyError(
+                f"No jet-to-track association branch found for jet_collection={jet_collection!r}. "
+                f"Tried: {tried}. Pass track_idx_branch=... explicitly if this ntuple uses a "
+                f"different name."
+            )
+
+    branches = [f"{jet_collection}_pt", f"{jet_collection}_eta", f"{jet_collection}_phi",
+                track_idx_branch, "Track_pt", "Track_z0", "Track_var_z0"]
+    arrs = tree.arrays(branches, entry_start=event_index, entry_stop=event_index + 1)
     i = 0
 
     jets = []
-    n_jets = len(arrs["AntiKt4EMTopoJets_pt"][i])
+    n_jets = len(arrs[f"{jet_collection}_pt"][i])
     for j in range(n_jets):
-        jet_pt = float(arrs["AntiKt4EMTopoJets_pt"][i][j])
+        jet_pt = float(arrs[f"{jet_collection}_pt"][i][j])
         if jet_pt < jet_pt_min:
             continue
         track_pt_sum = 0.0
-        for tidx in arrs["AntiKt4EMTopoJets_track_idx"][i][j]:
+        for tidx in arrs[track_idx_branch][i][j]:
             tidx = int(tidx)
             delz = float(arrs["Track_z0"][i][tidx]) - vtx_z
             sigma = math.sqrt(max(float(arrs["Track_var_z0"][i][tidx]), 1e-12))
@@ -150,6 +180,6 @@ def match_jets_to_vertex(
         rpt = track_pt_sum / jet_pt
         if rpt < rpt_min:
             continue
-        jets.append(Jet(pt=jet_pt, eta=float(arrs["AntiKt4EMTopoJets_eta"][i][j]),
-                         phi=float(arrs["AntiKt4EMTopoJets_phi"][i][j])))
+        jets.append(Jet(pt=jet_pt, eta=float(arrs[f"{jet_collection}_eta"][i][j]),
+                         phi=float(arrs[f"{jet_collection}_phi"][i][j])))
     return jets
