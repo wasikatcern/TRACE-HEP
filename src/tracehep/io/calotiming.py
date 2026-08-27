@@ -23,6 +23,7 @@ _BRANCHES = [
     "RecoVtx_z", "RecoVtx_x", "RecoVtx_y", "RecoVtx_sumPt2", "RecoVtx_isHS", "RecoVtx_isPU",
     "RecoVtx_track_idx",
     "Track_pt", "Track_eta", "Track_phi", "Track_d0", "Track_z0", "Track_time", "Track_hasValidTime",
+    "Track_truthVtx_idx",
     "TruthVtx_z", "TruthVtx_x", "TruthVtx_y", "TruthVtx_isHS",
     "averageInteractionsPerCrossing",
 ]
@@ -76,6 +77,9 @@ def load_vertex_event(path: str, event_index: int, *, tree_name: str = "ntuple",
             raw_tidx = int(raw_tidx)
             if raw_tidx not in track_idx_map:
                 has_time = bool(arrs["Track_hasValidTime"][i][raw_tidx])
+                truth_vtx_idx = int(arrs["Track_truthVtx_idx"][i][raw_tidx])
+                track_is_hs = (bool(arrs["TruthVtx_isHS"][i][truth_vtx_idx])
+                               if truth_vtx_idx != -1 else None)
                 track = Track(
                     pt=float(arrs["Track_pt"][i][raw_tidx]),
                     eta=float(arrs["Track_eta"][i][raw_tidx]),
@@ -84,6 +88,7 @@ def load_vertex_event(path: str, event_index: int, *, tree_name: str = "ntuple",
                     z0=float(arrs["Track_z0"][i][raw_tidx]),
                     x=vx, y=vy, z=float(arrs["Track_z0"][i][raw_tidx]),
                     time=float(arrs["Track_time"][i][raw_tidx]) if has_time else None,
+                    is_hs=track_is_hs,
                 )
                 track_idx_map[raw_tidx] = len(tracks)
                 tracks.append(track)

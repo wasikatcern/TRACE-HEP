@@ -43,6 +43,13 @@ def _track_offset(track):
     return _schematic_offset(track.pt, track.eta, track.phi, scale=2.0)
 
 
+def _track_is_hs(track, vtx):
+    """Prefer the track's own truth-level HS match (a reconstructed "HS"
+    vertex routinely includes some truth-PU tracks); fall back to the
+    owning vertex's flag when no truth information is available."""
+    return track.is_hs if track.is_hs is not None else vtx.is_hs
+
+
 def plot_vertices_zr(
     vertex_event: VertexEvent,
     *,
@@ -102,9 +109,10 @@ def plot_vertices_zr(
             track = vertex_event.tracks[ti]
             dz, dr = _track_offset(track)
             z0, z1 = vtx.z, vtx.z + dz
-            if style == "time_colored" and not vtx.is_hs and track.time is not None:
+            track_is_hs = _track_is_hs(track, vtx)
+            if style == "time_colored" and not track_is_hs and track.time is not None:
                 color, lw = tcmap(tnorm(track.time)), 1.0
-            elif vtx.is_hs:
+            elif track_is_hs:
                 color, lw = COLOR_HS, 1.4
             else:
                 color, lw = COLOR_PU, 1.0
@@ -206,12 +214,13 @@ def plot_vertex_detail(
     else:
         fig = ax.figure
 
-    track_color = COLOR_HS if vtx.is_hs else COLOR_PU
     for ti in vtx.track_indices:
         if ti >= len(vertex_event.tracks):
             continue
-        dz, dr = _track_offset(vertex_event.tracks[ti])
-        ax.plot([vtx.z, vtx.z + dz], [0, dr], color=track_color, linewidth=1.2)
+        track = vertex_event.tracks[ti]
+        dz, dr = _track_offset(track)
+        color = COLOR_HS if _track_is_hs(track, vtx) else COLOR_PU
+        ax.plot([vtx.z, vtx.z + dz], [0, dr], color=color, linewidth=1.2)
 
     for eta_ref, ls in [(2.5, "dashed"), (4.0, "dotted")]:
         theta = 2 * math.atan(math.exp(-eta_ref))
@@ -245,8 +254,8 @@ def plot_vertex_detail(
         ax.text(x0 + 0.1, 0.55 - k * 0.12, label, fontsize=10, weight="bold", color=color)
 
     ax.legend(handles=[
-        plt.Line2D([], [], color=COLOR_HS, label="HS vertex tracks"),
-        plt.Line2D([], [], color=COLOR_PU, label="PU vertex tracks"),
+        plt.Line2D([], [], color=COLOR_HS, label="HS tracks"),
+        plt.Line2D([], [], color=COLOR_PU, label="PU tracks"),
         plt.Rectangle((0, 0), 1, 1, color=DEFAULT_COLORS["jet"], alpha=0.5, label="Jet"),
         plt.Rectangle((0, 0), 1, 1, color=DEFAULT_COLORS["bjet"], alpha=0.5, label="b-jet"),
     ], loc="upper right", fontsize=9)

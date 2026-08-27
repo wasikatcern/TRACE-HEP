@@ -3,7 +3,7 @@ import plotly.graph_objects as go
 import pytest
 
 from tracehep.models import Jet, Track, TruthVertex, Vertex, VertexEvent
-from tracehep.vertices.zr import plot_vertices_zr, plot_vertex_detail
+from tracehep.vertices.zr import plot_vertices_zr, plot_vertex_detail, COLOR_HS, COLOR_PU
 from tracehep.vertices.view3d import plot_vertices_3d
 
 
@@ -67,3 +67,21 @@ def test_plot_vertex_detail_zoom_range(sample_vertex_event):
     xlim = ax.get_xlim()
     assert xlim[0] == pytest.approx(-5.0)
     assert xlim[1] == pytest.approx(1.0)
+
+
+def test_track_colour_prefers_own_truth_match_over_vertex_flag():
+    # A reconstructed "HS" vertex routinely contains some truth-PU tracks --
+    # each track must be coloured by its own is_hs, not painted uniformly
+    # by the vertex's flag (regression test for that exact bug).
+    tracks = [
+        Track(pt=20, eta=0.5, phi=0.1, x=0.0, y=0.0, z=-2.0, is_hs=True),
+        Track(pt=15, eta=-0.3, phi=1.2, x=0.0, y=0.0, z=-2.0, is_hs=False),
+        Track(pt=10, eta=0.2, phi=0.8, x=0.0, y=0.0, z=-2.0, is_hs=None),  # no truth info
+    ]
+    vertices = [Vertex(z=-2.0, sum_pt2=625.0, is_hs=True, track_indices=[0, 1, 2])]
+    ve = VertexEvent(vertices=vertices, tracks=tracks, label="test-mixed")
+
+    fig = plot_vertex_detail(ve, vtx_index=0)
+    colors = [line.get_color() for line in fig.axes[0].get_lines()]
+    assert COLOR_HS in colors  # track 0 (own is_hs=True) and track 2 (falls back to vertex's HS flag)
+    assert COLOR_PU in colors  # track 1: own is_hs=False, despite the vertex being HS

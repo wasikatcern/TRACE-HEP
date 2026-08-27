@@ -40,6 +40,13 @@ class Track:
     """Reconstructed track time [ps], if the ntuple provides per-track
     timing (e.g. an HGTD-style "4D tracking" ntuple). Used by the
     time-coloured vertex display."""
+    is_hs: Optional[bool] = None
+    """Truth-level hard-scatter match for this individual track (not the
+    same as the owning vertex's is_hs -- a reconstructed "HS" vertex can,
+    and often does, include some truth-PU tracks). None if truth
+    information isn't available (e.g. on real data). When set, vertex
+    displays colour this track by it instead of by the owning vertex's
+    flag."""
 
 
 @dataclass
