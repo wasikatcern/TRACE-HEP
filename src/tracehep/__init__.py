@@ -20,7 +20,7 @@ from .vertices.zr import plot_vertices_zr, plot_vertex_detail
 from .vertices.view3d import plot_vertices_3d
 from .colors import DEFAULT_COLORS, TRACK_COLOR, DISPLACED_COLOR
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"
 
 __all__ = [
     "__version__",

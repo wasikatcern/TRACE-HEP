@@ -61,6 +61,16 @@ def test_plot_vertex_detail_with_jets(sample_vertex_event):
     assert len(ax.patches) >= 2
 
 
+def test_plot_vertex_detail_jets_coloured_by_is_hs(sample_vertex_event):
+    import matplotlib.colors as mcolors
+
+    jets = [Jet(pt=80, eta=0.4, phi=0.2, is_hs=True), Jet(pt=40, eta=-1.0, phi=1.5, is_hs=False)]
+    fig = plot_vertex_detail(sample_vertex_event, vtx_index=0, jets=jets)
+    patch_colors = [p.get_facecolor()[:3] for p in fig.axes[0].patches]
+    assert mcolors.to_rgb(COLOR_HS) in patch_colors  # jet 0: is_hs=True
+    assert mcolors.to_rgb(COLOR_PU) in patch_colors  # jet 1: is_hs=False
+
+
 def test_plot_vertex_detail_zoom_range(sample_vertex_event):
     fig = plot_vertex_detail(sample_vertex_event, vtx_index=0, zoom_range_mm=3.0)
     ax = fig.axes[0]

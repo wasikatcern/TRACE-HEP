@@ -163,8 +163,13 @@ def match_jets_to_vertex(
                 f"different name."
             )
 
+    truth_hs_branch = f"{jet_collection}_truthHSJet_idx"
+    has_truth = truth_hs_branch in available
+
     branches = [f"{jet_collection}_pt", f"{jet_collection}_eta", f"{jet_collection}_phi",
                 track_idx_branch, "Track_pt", "Track_z0", "Track_var_z0"]
+    if has_truth:
+        branches.append(truth_hs_branch)
     arrs = tree.arrays(branches, entry_start=event_index, entry_stop=event_index + 1)
     i = 0
 
@@ -185,6 +190,7 @@ def match_jets_to_vertex(
         rpt = track_pt_sum / jet_pt
         if rpt < rpt_min:
             continue
+        jet_is_hs = len(arrs[truth_hs_branch][i][j]) >= 1 if has_truth else None
         jets.append(Jet(pt=jet_pt, eta=float(arrs[f"{jet_collection}_eta"][i][j]),
-                         phi=float(arrs[f"{jet_collection}_phi"][i][j])))
+                         phi=float(arrs[f"{jet_collection}_phi"][i][j]), is_hs=jet_is_hs))
     return jets

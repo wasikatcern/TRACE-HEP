@@ -15,7 +15,6 @@ import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 
-from ..colors import DEFAULT_COLORS
 from ..models import Jet, VertexEvent
 
 __all__ = ["plot_vertices_zr", "plot_vertex_detail"]
@@ -238,11 +237,11 @@ def plot_vertex_detail(
         width = length * 0.3
         norm = max(length, 1e-9)
         perp_x, perp_y = -dr / norm * width / 2, dz / norm * width / 2
-        color = DEFAULT_COLORS["bjet"] if j.btag else DEFAULT_COLORS["jet"]
+        color = COLOR_HS if j.is_hs else COLOR_PU
         ax.fill([vtx.z, vtx.z + dz + perp_x, vtx.z + dz - perp_x],
                 [0, dr + perp_y, dr - perp_y], color=color, alpha=0.5)
-        jet_labels.append((f"Jet {len(jet_labels) + 1}: pT={j.pt:.0f} GeV, eta={j.eta:.1f}"
-                            + (" (b)" if j.btag else ""), color))
+        jet_labels.append((f"{'HS' if j.is_hs else 'PU'} Jet {len(jet_labels) + 1}: "
+                            f"pT={j.pt:.0f} GeV, eta={j.eta:.1f}", color))
 
     x0 = vtx.z - zoom_range_mm
     ax.text(x0 + 0.1, 0.95, f"Reco z = {vtx.z:.1f} mm", fontsize=11, weight="bold")
@@ -256,8 +255,8 @@ def plot_vertex_detail(
     ax.legend(handles=[
         plt.Line2D([], [], color=COLOR_HS, label="HS tracks"),
         plt.Line2D([], [], color=COLOR_PU, label="PU tracks"),
-        plt.Rectangle((0, 0), 1, 1, color=DEFAULT_COLORS["jet"], alpha=0.5, label="Jet"),
-        plt.Rectangle((0, 0), 1, 1, color=DEFAULT_COLORS["bjet"], alpha=0.5, label="b-jet"),
+        plt.Rectangle((0, 0), 1, 1, color=COLOR_HS, alpha=0.5, label="HS jet"),
+        plt.Rectangle((0, 0), 1, 1, color=COLOR_PU, alpha=0.5, label="PU jet"),
     ], loc="upper right", fontsize=9)
 
     ax.axhline(y=0.0, color="black", linestyle="--", linewidth=0.8)

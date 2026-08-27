@@ -19,6 +19,10 @@ class Jet:
     phi: float
     mass: float = 0.0
     btag: bool = False
+    is_hs: Optional[bool] = None
+    """Truth-level hard-scatter match for this jet (e.g. from a
+    truthHSJet_idx-style branch). None if truth information isn't
+    available (e.g. on real data)."""
 
 
 @dataclass
