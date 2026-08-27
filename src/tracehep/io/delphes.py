@@ -1,0 +1,120 @@
+"""Load events out of a Delphes fast-simulation ROOT file's "Delphes" tree
+via uproot -- no Delphes shared-library or dictionary needed. Works
+unchanged on any Delphes sample for any generated physics process, since
+every Delphes sample shares the same object-collection branch names.
+
+Requires the ``delphes`` extra: ``pip install trace-hep[delphes]``.
+
+Developed by Wasikul Islam, PhD.
+"""
+
+from typing import Dict, Iterable, List
+
+from ..models import Event, Jet, Lepton, Photon, MissingET, Track
+
+__all__ = ["load_event", "load_events"]
+
+_BRANCHES = [
+    "Jet/Jet.PT", "Jet/Jet.Eta", "Jet/Jet.Phi", "Jet/Jet.Mass", "Jet/Jet.BTag",
+    "Muon/Muon.PT", "Muon/Muon.Eta", "Muon/Muon.Phi",
+    "Electron/Electron.PT", "Electron/Electron.Eta", "Electron/Electron.Phi",
+    "Photon/Photon.PT", "Photon/Photon.Eta", "Photon/Photon.Phi",
+    "MissingET/MissingET.MET", "MissingET/MissingET.Eta", "MissingET/MissingET.Phi",
+    "Event/Event.Number",
+]
+_TRACK_BRANCHES = [
+    "Track/Track.PT", "Track/Track.Eta", "Track/Track.Phi", "Track/Track.Charge",
+    "Track/Track.D0", "Track/Track.DZ", "Track/Track.X", "Track/Track.Y", "Track/Track.Z",
+]
+
+
+def _require_uproot():
+    try:
+        import uproot  # noqa: F401
+    except ImportError as exc:
+        raise ImportError(
+            "tracehep.io.delphes requires uproot. Install with: pip install trace-hep[delphes]"
+        ) from exc
+    return uproot
+
+
+def load_events(path: str, indices: Iterable[int], *, with_tracks: bool = True,
+                 label: str = "") -> Dict[int, Event]:
+    """Load several events at once (a single, contiguous-range read).
+
+    Parameters
+    ----------
+    path:
+        Path to a Delphes ROOT file.
+    indices:
+        Event indices to load.
+    with_tracks:
+        Also read the (much larger) Track collection.
+    label:
+        Free-text label stamped onto every returned Event (used in default
+        plot titles), e.g. a sample name.
+
+    Returns
+    -------
+    dict mapping each requested index to its :class:`~tracehep.models.Event`.
+    """
+    uproot = _require_uproot()
+    indices = sorted(set(indices))
+    if not indices:
+        return {}
+
+    f = uproot.open(path)
+    tree = f["Delphes"]
+    branches = list(_BRANCHES) + (list(_TRACK_BRANCHES) if with_tracks else [])
+    lo, hi = indices[0], indices[-1] + 1
+    arrs = tree.arrays(branches, entry_start=lo, entry_stop=hi)
+
+    events: Dict[int, Event] = {}
+    for idx in indices:
+        i = idx - lo
+        jpt, jeta, jphi = arrs["Jet/Jet.PT"][i], arrs["Jet/Jet.Eta"][i], arrs["Jet/Jet.Phi"][i]
+        jmass, jbtag = arrs["Jet/Jet.Mass"][i], arrs["Jet/Jet.BTag"][i]
+        jets: List[Jet] = [
+            Jet(pt=float(pt), eta=float(eta), phi=float(phi), mass=float(m), btag=bool(int(bt) & 1))
+            for pt, eta, phi, m, bt in zip(jpt, jeta, jphi, jmass, jbtag)
+        ]
+
+        def _leptons(prefix: str, flavor: str) -> List[Lepton]:
+            pts, etas, phis = arrs[f"{prefix}.PT"][i], arrs[f"{prefix}.Eta"][i], arrs[f"{prefix}.Phi"][i]
+            return [Lepton(pt=float(p), eta=float(e), phi=float(ph), flavor=flavor)
+                    for p, e, ph in zip(pts, etas, phis)]
+
+        muons = _leptons("Muon/Muon", "muon")
+        electrons = _leptons("Electron/Electron", "electron")
+        photons = [Photon(pt=float(p), eta=float(e), phi=float(ph))
+                   for p, e, ph in zip(arrs["Photon/Photon.PT"][i], arrs["Photon/Photon.Eta"][i],
+                                        arrs["Photon/Photon.Phi"][i])]
+
+        met_pt_arr = arrs["MissingET/MissingET.MET"][i]
+        met = None
+        if len(met_pt_arr) > 0:
+            met = MissingET(pt=float(met_pt_arr[0]), phi=float(arrs["MissingET/MissingET.Phi"][i][0]),
+                             eta=float(arrs["MissingET/MissingET.Eta"][i][0]))
+
+        tracks: List[Track] = []
+        if with_tracks:
+            tpt, teta, tphi = arrs["Track/Track.PT"][i], arrs["Track/Track.Eta"][i], arrs["Track/Track.Phi"][i]
+            tq, td0, tdz = arrs["Track/Track.Charge"][i], arrs["Track/Track.D0"][i], arrs["Track/Track.DZ"][i]
+            tx, ty, tz = arrs["Track/Track.X"][i], arrs["Track/Track.Y"][i], arrs["Track/Track.Z"][i]
+            tracks = [
+                Track(pt=float(pt), eta=float(eta), phi=float(phi), charge=int(q),
+                      d0=float(d0), z0=float(dz), x=float(x), y=float(y), z=float(z))
+                for pt, eta, phi, q, d0, dz, x, y, z
+                in zip(tpt, teta, tphi, tq, td0, tdz, tx, ty, tz)
+            ]
+
+        events[idx] = Event(
+            jets=jets, tracks=tracks, muons=muons, electrons=electrons, photons=photons,
+            met=met, event_number=int(arrs["Event/Event.Number"][i][0]), label=label,
+        )
+    return events
+
+
+def load_event(path: str, index: int, *, with_tracks: bool = True, label: str = "") -> Event:
+    """Load a single event. See :func:`load_events` for the batch form."""
+    return load_events(path, [index], with_tracks=with_tracks, label=label)[index]
