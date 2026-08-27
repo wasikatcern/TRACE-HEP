@@ -48,5 +48,8 @@ trace-batch = "tracehep.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/tracehep"]
 
+[tool.hatch.build.targets.sdist]
+include = ["src/tracehep", "tests", "README.md", "LICENSE", "pyproject.toml"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
