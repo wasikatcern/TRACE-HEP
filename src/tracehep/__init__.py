@@ -19,8 +19,9 @@ from .view3d import plot_event_3d
 from .vertices.zr import plot_vertices_zr, plot_vertex_detail
 from .vertices.view3d import plot_vertices_3d
 from .colors import DEFAULT_COLORS, TRACK_COLOR, DISPLACED_COLOR
+from .filters import filter_event, filter_vertex_event, filter_tracks, filter_jets
 
-__version__ = "0.1.5"
+__version__ = "0.1.6"
 
 __all__ = [
     "__version__",
@@ -30,6 +31,8 @@ __all__ = [
     # drawing
     "plot_event_polar", "plot_event_beam2d", "plot_event_3d",
     "plot_vertices_zr", "plot_vertex_detail", "plot_vertices_3d",
+    # filtering (pT/eta cuts, jet collections, etc.)
+    "filter_event", "filter_vertex_event", "filter_tracks", "filter_jets",
     # colours
     "DEFAULT_COLORS", "TRACK_COLOR", "DISPLACED_COLOR",
 ]

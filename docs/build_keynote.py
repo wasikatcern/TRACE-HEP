@@ -174,7 +174,7 @@ deck = Deck()
 # ---------------------------------------------------------------------
 deck.title_slide(
     "TRACE-HEP",
-    "Comprehensive Documentation - v0.1.5 - Toolkit for Reading Annotated Collider-Event displays",
+    "Comprehensive Documentation - v0.1.6 - Toolkit for Reading Annotated Collider-Event displays",
 )
 
 deck.text_slide("What is TRACE-HEP?", [
@@ -217,7 +217,7 @@ pip install -e ".[dev]"
 pytest -q""")
 
 deck.code_slide("Verify the install", '''python3 -c "import tracehep as trace; print(trace.__version__)"
-# -> 0.1.5
+# -> 0.1.6
 
 trace-batch --help
 # -> usage: trace-batch [-h] --input FILE.root --indices N [N ...] ...''')
@@ -371,6 +371,74 @@ deck.image_slide("Output: single-vertex detail with jets", "vertex_detail.png",
                   caption="Vertex 0 (HS): 10 jets matched (9 truth-HS, 1 truth-PU), sum(pT^2) = 2.5e3 GeV^2 -- tracks and jets each coloured by their own truth match")
 
 # ---------------------------------------------------------------------
+deck.text_slide("Filtering and jet collections", [
+    "Real analyses rarely want every jet or every track --",
+    "trace-hep supports both, without touching a single plotting function:",
+    "",
+    "1) Jet collection is a LOADER choice",
+    "   -- which ROOT branches to read (Jet, GenJet, JetPUPPI, ...)",
+    "",
+    "2) pT / eta cuts are a POST-LOAD, format-agnostic filter",
+    "   -- tracehep.filters transforms an already-loaded Event or",
+    "      VertexEvent, so one cut applies identically to every",
+    "      display: polar, beam2d, 3D, z-R, vertex-detail, ...",
+], bullet=False, font_size=22)
+
+deck.code_slide("Choosing a jet collection", '''from tracehep.io.delphes import load_events
+
+# a Delphes card can define several jet collections --
+# default is "Jet"; read a different one by name
+events = load_events(
+    "ttbar_delphes_events.root", indices=[7],
+    jet_collection="ParticleFlowJet04",
+)
+trace.plot_event_polar(events[7], show_tracks=True)''',
+    note='Also works for match_jets_to_vertex (jet_collection="AntiKt4EMPFlowJets", ...) and the flat-ntuple loader (jet_branches=(...), bjet_branches=(...)).')
+
+deck.image_slide("Output: ParticleFlowJet04 vs. the default Jet collection", "filter_jet_collection.png",
+                  caption="Same event, different jet collection: Jet 1 = 401 GeV here vs. 243 GeV with the default \"Jet\" collection -- a different clustering algorithm/input, same event")
+
+deck.code_slide("Cutting on pT and eta", '''from tracehep.filters import filter_event
+
+event = load_events("ttbar_delphes_events.root", indices=[7])[7]
+
+# keep only jets above 50 GeV within |eta| < 2.5,
+# and tracks above 2 GeV within |eta| < 2.5
+tight = filter_event(
+    event,
+    jet_pt_min=50.0, jet_eta_min=-2.5, jet_eta_max=2.5,
+    track_pt_min=2.0, track_eta_min=-2.5, track_eta_max=2.5,
+)
+trace.plot_event_polar(tight, show_tracks=True)''',
+    note="eta_min/eta_max bound eta directly (signed, not abs(eta)) -- pass eta_min=0 to keep only positive-eta objects.")
+
+deck.image_slide("Output: after pT/eta cuts", "filter_event_cuts.png",
+                  caption="Same event 7: 77 -> 36 tracks after the pT/eta cut (all 4 jets already passed pT>50 GeV, |eta|<2.5)")
+
+deck.code_slide("Filtering a vertex scenario", '''from tracehep.filters import filter_vertex_event
+
+vtx_event = load_vertex_event("calo_timing_ntuple.root", event_index=37)
+vtx_event = filter_vertex_event(
+    vtx_event, track_pt_min=1.0, track_eta_min=-2.5, track_eta_max=2.5,
+)
+plot_vertices_zr(vtx_event, style="styled")''',
+    note="Vertices are never dropped, only the tracks fit to them -- each vertex's track_indices is remapped to stay consistent.")
+
+deck.image_slide("Output: vertex 0 after track pT/eta cuts", "filter_vertex_tight.png",
+                  caption="Event 37: 969 -> 607 tracks event-wide after the cut; vertex 0 goes from 10 to 5 matched jets once jet_pt_min=50 GeV is also applied")
+
+deck.text_slide("Filtering from the command line", [
+    "trace-batch --input sample.root --indices 0 1 2 --outdir out/ \\",
+    "    --jet-collection ParticleFlowJet04 \\",
+    "    --jet-pt-min 30 --jet-eta-min -2.5 --jet-eta-max 2.5 \\",
+    "    --show-tracks --track-pt-min 1.0 \\",
+    "    --track-eta-min -2.5 --track-eta-max 2.5",
+    "",
+    "Every filter available in Python is also a trace-batch flag --",
+    "no code needed for a batch of cut, collection-specific displays.",
+], bullet=False, font="Menlo", font_size=17)
+
+# ---------------------------------------------------------------------
 deck.code_slide("Batch processing many events at once", '''from tracehep.io.delphes import load_events
 from tracehep.batch import run_event_batch
 
@@ -426,11 +494,14 @@ deck.text_slide("Function reference: vertex displays", [
 ], bullet=False, font="Menlo", font_size=17)
 
 deck.text_slide("Loader reference (tracehep.io)", [
-    "delphes.load_event(path, index, with_tracks=True, label=\"\")",
-    "delphes.load_events(path, indices, with_tracks=True, label=\"\")",
+    'delphes.load_event(path, index, with_tracks=True,',
+    '    jet_collection="Jet", label="")',
+    "delphes.load_events(path, indices, with_tracks=True,",
+    '    jet_collection="Jet", label="")',
     "",
     "flat_ntuple.load_event_by_run_event(path, run, event,",
-    '    tree_name="Ntuple", label="")',
+    '    tree_name="Ntuple", jet_branches=("JET_pt","JET_eta","JET_phi"),',
+    '    bjet_branches=("bJET_pt","bJET_eta","bJET_phi"), label="")',
     "flat_ntuple.load_events_by_run_event(path, pairs, ...)",
     "",
     'calotiming.load_vertex_event(path, event_index,',
@@ -440,6 +511,22 @@ deck.text_slide("Loader reference (tracehep.io)", [
     "    jet_pt_min=30.0, rpt_min=0.02, sig_cut=3.0)",
     "",
     "All four require: pip install \"trace-hep[delphes]\"",
+], bullet=False, font="Menlo", font_size=15)
+
+deck.text_slide("Filter reference (tracehep.filters)", [
+    "filter_event(event, *, jet_pt_min=None, jet_pt_max=None,",
+    "    jet_eta_min=None, jet_eta_max=None, track_pt_min=None,",
+    "    track_pt_max=None, track_eta_min=None, track_eta_max=None)",
+    "",
+    "filter_vertex_event(vertex_event, *, track_pt_min=None,",
+    "    track_pt_max=None, track_eta_min=None, track_eta_max=None)",
+    "",
+    "filter_jets(jets, *, pt_min=None, pt_max=None,",
+    "    eta_min=None, eta_max=None, btag_only=False)",
+    "filter_tracks(tracks, *, pt_min=None, pt_max=None,",
+    "    eta_min=None, eta_max=None)",
+    "",
+    "All four return a filtered COPY -- the input is never modified.",
 ], bullet=False, font="Menlo", font_size=16)
 
 # ---------------------------------------------------------------------
@@ -475,7 +562,7 @@ deck.text_slide("Get involved", [
     "Source:    github.com/wasikatcern/TRACE-HEP",
     "Install:   pip install trace-hep  (TestPyPI now; PyPI planned)",
     "License:   MIT",
-    "Tests:     pytest -q   (26 passing at v0.1.5)",
+    "Tests:     pytest -q   (32 passing at v0.1.6)",
     "Contact:   wasikul.islam@cern.ch",
     "",
     "Citing: accompanying paper citation to be added once posted.",

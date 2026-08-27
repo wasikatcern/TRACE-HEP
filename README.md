@@ -48,10 +48,20 @@ for idx, event in events.items():
     trace.plot_event_polar(event, show_tracks=True).savefig(f"event{idx}_polar.png")
 ```
 
+`load_events`/`load_event` read the standard Delphes `"Jet"` collection by
+default; pass `jet_collection=` to read a different one instead (a given
+Delphes card can define several -- `"GenJet"`, `"JetPUPPI"`,
+`"ParticleFlowJet04"`, a large-R `"CaloJet08"`, ...):
+
+```python
+events = load_events("my_sample.root", indices=[0], jet_collection="ParticleFlowJet04")
+```
+
 Or from the command line, no Python required:
 
 ```bash
-trace-batch --input my_sample.root --indices 0 1 2 --outdir out/ --which polar beam2d
+trace-batch --input my_sample.root --indices 0 1 2 --outdir out/ --which polar beam2d \
+    --jet-collection ParticleFlowJet04 --jet-pt-min 30 --show-tracks --track-pt-min 1.0 --track-eta-max 2.5
 ```
 
 ## Vertex displays
@@ -118,6 +128,53 @@ long-lived-particle decay topologies:
 trace.plot_event_polar(event, show_tracks=True, d0_displaced_mm=1.0)
 ```
 
+## Filtering: pT/eta cuts and jet collections
+
+Cuts are a post-load transformation, not a plotting-function argument --
+`tracehep.filters` returns a filtered *copy* of an `Event` or
+`VertexEvent`, and every drawing function works on it unchanged, so one cut
+applies identically to the polar, beam2d, 3D, z-R, and vertex-detail views:
+
+```python
+from tracehep.filters import filter_event
+
+event = load_events("my_sample.root", indices=[0])[0]
+
+# keep only jets above 50 GeV within |eta| < 2.5, and tracks above 1 GeV
+tight = filter_event(
+    event,
+    jet_pt_min=50.0, jet_eta_min=-2.5, jet_eta_max=2.5,
+    track_pt_min=1.0,
+)
+trace.plot_event_polar(tight, show_tracks=True).savefig("event0_tight.png")
+```
+
+`eta_min`/`eta_max` bound `eta` directly (signed, not `abs(eta)`) -- pass
+`jet_eta_min=0` to keep only positive-eta jets, or symmetric bounds like
+`track_eta_min=-2.5, track_eta_max=2.5` for a central-only selection.
+`filter_jets`/`filter_tracks` apply the same cuts to a bare list if you'd
+rather filter before building an `Event` yourself; `filter_jets` also takes
+`btag_only=True`.
+
+The same cuts work on pileup scenarios via `filter_vertex_event` -- vertices
+are never dropped, only the tracks fit to them (each vertex's
+`track_indices` is remapped to stay consistent):
+
+```python
+from tracehep.filters import filter_vertex_event
+
+vtx_event = load_vertex_event("my_pileup_ntuple.root", event_index=37)
+vtx_event = filter_vertex_event(vtx_event, track_pt_min=1.0, track_eta_min=-2.5, track_eta_max=2.5)
+
+plot_vertices_zr(vtx_event, style="styled").savefig("vertices_tight.png")
+```
+
+Jet *collection* (as opposed to a cut) is a loader-level choice, since it
+picks which ROOT branches to read -- see `jet_collection` above for the
+Delphes loader and `jet_collection`/`track_idx_branch` above for
+`match_jets_to_vertex`; the flat-ntuple loader takes the analogous
+`jet_branches`/`bjet_branches` (see `tracehep/io/flat_ntuple.py`).
+
 ## Data model
 
 Every drawing function accepts plain dataclasses from `tracehep.models`:
@@ -132,6 +189,10 @@ available, e.g. on real data). The calo-timing loaders populate both from
 truth branches when present; vertex displays colour tracks and jets by
 these fields, falling back to the owning vertex's `is_hs`/`is_pu` flag only
 when an individual object has no truth match of its own.
+
+`tracehep.filters` (`filter_event`, `filter_vertex_event`, `filter_jets`,
+`filter_tracks`) applies pT/eta cuts to any of these objects after loading
+-- see "Filtering" above.
 
 ## Status
 

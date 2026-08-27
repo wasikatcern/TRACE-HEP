@@ -3,6 +3,11 @@ via uproot -- no Delphes shared-library or dictionary needed. Works
 unchanged on any Delphes sample for any generated physics process, since
 every Delphes sample shares the same object-collection branch names.
 
+Pass ``jet_collection`` to read a jet collection other than the default
+``"Jet"`` (e.g. a Delphes card that also defines ``"GenJet"`` or
+``"JetPUPPI"``). Track/jet pT and eta cuts are not a loader concern -- load
+the full event, then use :func:`tracehep.filters.filter_event`.
+
 Requires the ``delphes`` extra: ``pip install trace-hep[delphes]``.
 
 Developed by Wasikul Islam, PhD.
@@ -15,7 +20,6 @@ from ..models import Event, Jet, Lepton, Photon, MissingET, Track
 __all__ = ["load_event", "load_events"]
 
 _BRANCHES = [
-    "Jet/Jet.PT", "Jet/Jet.Eta", "Jet/Jet.Phi", "Jet/Jet.Mass", "Jet/Jet.BTag",
     "Muon/Muon.PT", "Muon/Muon.Eta", "Muon/Muon.Phi",
     "Electron/Electron.PT", "Electron/Electron.Eta", "Electron/Electron.Phi",
     "Photon/Photon.PT", "Photon/Photon.Eta", "Photon/Photon.Phi",
@@ -39,7 +43,7 @@ def _require_uproot():
 
 
 def load_events(path: str, indices: Iterable[int], *, with_tracks: bool = True,
-                 label: str = "") -> Dict[int, Event]:
+                 jet_collection: str = "Jet", label: str = "") -> Dict[int, Event]:
     """Load several events at once (a single, contiguous-range read).
 
     Parameters
@@ -50,6 +54,12 @@ def load_events(path: str, indices: Iterable[int], *, with_tracks: bool = True,
         Event indices to load.
     with_tracks:
         Also read the (much larger) Track collection.
+    jet_collection:
+        Branch-name prefix for the jet collection to load, e.g. ``"Jet"``
+        (default -- the standard Delphes anti-kt jet collection), or
+        whatever else a given Delphes card defines (e.g. ``"GenJet"``,
+        ``"JetPUPPI"``, ``"FatJet"``). Raises ``KeyError`` (listing the
+        collections actually present) if the branch isn't found.
     label:
         Free-text label stamped onto every returned Event (used in default
         plot titles), e.g. a sample name.
@@ -65,15 +75,38 @@ def load_events(path: str, indices: Iterable[int], *, with_tracks: bool = True,
 
     f = uproot.open(path)
     tree = f["Delphes"]
-    branches = list(_BRANCHES) + (list(_TRACK_BRANCHES) if with_tracks else [])
+    available = set(tree.keys())
+
+    jet_pt_b = f"{jet_collection}/{jet_collection}.PT"
+    jet_eta_b = f"{jet_collection}/{jet_collection}.Eta"
+    jet_phi_b = f"{jet_collection}/{jet_collection}.Phi"
+    jet_mass_b = f"{jet_collection}/{jet_collection}.Mass"
+    jet_btag_b = f"{jet_collection}/{jet_collection}.BTag"
+    if jet_pt_b not in available:
+        collections = sorted({k.split("/")[0] for k in available if "/" in k})
+        raise KeyError(
+            f"Jet collection {jet_collection!r} not found in {path} (tried branch "
+            f"{jet_pt_b!r}). Collections present in this file: {collections}"
+        )
+    has_mass = jet_mass_b in available
+    has_btag = jet_btag_b in available
+
+    jet_branches = [jet_pt_b, jet_eta_b, jet_phi_b]
+    if has_mass:
+        jet_branches.append(jet_mass_b)
+    if has_btag:
+        jet_branches.append(jet_btag_b)
+
+    branches = jet_branches + list(_BRANCHES) + (list(_TRACK_BRANCHES) if with_tracks else [])
     lo, hi = indices[0], indices[-1] + 1
     arrs = tree.arrays(branches, entry_start=lo, entry_stop=hi)
 
     events: Dict[int, Event] = {}
     for idx in indices:
         i = idx - lo
-        jpt, jeta, jphi = arrs["Jet/Jet.PT"][i], arrs["Jet/Jet.Eta"][i], arrs["Jet/Jet.Phi"][i]
-        jmass, jbtag = arrs["Jet/Jet.Mass"][i], arrs["Jet/Jet.BTag"][i]
+        jpt, jeta, jphi = arrs[jet_pt_b][i], arrs[jet_eta_b][i], arrs[jet_phi_b][i]
+        jmass = arrs[jet_mass_b][i] if has_mass else [0.0] * len(jpt)
+        jbtag = arrs[jet_btag_b][i] if has_btag else [0] * len(jpt)
         jets: List[Jet] = [
             Jet(pt=float(pt), eta=float(eta), phi=float(phi), mass=float(m), btag=bool(int(bt) & 1))
             for pt, eta, phi, m, bt in zip(jpt, jeta, jphi, jmass, jbtag)
@@ -115,6 +148,8 @@ def load_events(path: str, indices: Iterable[int], *, with_tracks: bool = True,
     return events
 
 
-def load_event(path: str, index: int, *, with_tracks: bool = True, label: str = "") -> Event:
+def load_event(path: str, index: int, *, with_tracks: bool = True,
+                jet_collection: str = "Jet", label: str = "") -> Event:
     """Load a single event. See :func:`load_events` for the batch form."""
-    return load_events(path, [index], with_tracks=with_tracks, label=label)[index]
+    return load_events(path, [index], with_tracks=with_tracks,
+                        jet_collection=jet_collection, label=label)[index]

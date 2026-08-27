@@ -15,6 +15,7 @@ matplotlib.use("Agg")
 import tracehep as trace
 from tracehep.io.delphes import load_events
 from tracehep.io.calotiming import load_vertex_event, match_jets_to_vertex
+from tracehep.filters import filter_event, filter_vertex_event
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUTDIR = os.path.join(HERE, "assets")
@@ -80,5 +81,30 @@ print(f"  vertex 0: is_hs={vtx0.is_hs}, sum_pt2={vtx0.sum_pt2:.1f}, {len(jets)} 
 fig8 = trace.plot_vertex_detail(vtx_event, vtx_index=0, jets=jets)
 fig8.savefig(os.path.join(OUTDIR, "vertex_detail.png"), dpi=150, bbox_inches="tight")
 print("  vertex_detail.png")
+
+print("=== 6. Filtering: a different jet collection (event 7) ===")
+events_pf = load_events(DELPHES_FILE, indices=[7], with_tracks=True, jet_collection="ParticleFlowJet04",
+                         label="ttbar_delphes_events, ParticleFlowJet04")
+ev7_pf = events_pf[7]
+fig9 = trace.plot_event_polar(ev7_pf, show_tracks=True)
+fig9.savefig(os.path.join(OUTDIR, "filter_jet_collection.png"), dpi=150, bbox_inches="tight")
+print(f"  filter_jet_collection.png (ParticleFlowJet04: {len(ev7_pf.jets)} jets, "
+      f"default Jet collection: {len(ev7.jets)} jets)")
+
+print("=== 7. Filtering: pT/eta cuts on the same event (event 7) ===")
+ev7_tight = filter_event(ev7, jet_pt_min=50.0, jet_eta_min=-2.5, jet_eta_max=2.5,
+                          track_pt_min=2.0, track_eta_min=-2.5, track_eta_max=2.5)
+fig10 = trace.plot_event_polar(ev7_tight, show_tracks=True)
+fig10.savefig(os.path.join(OUTDIR, "filter_event_cuts.png"), dpi=150, bbox_inches="tight")
+print(f"  filter_event_cuts.png ({len(ev7.jets)} -> {len(ev7_tight.jets)} jets, "
+      f"{len(ev7.tracks)} -> {len(ev7_tight.tracks)} tracks)")
+
+print("=== 8. Filtering: pT/eta cuts on a vertex scenario (event 37, vertex 0) ===")
+vtx_event_tight = filter_vertex_event(vtx_event, track_pt_min=1.0, track_eta_min=-2.5, track_eta_max=2.5)
+jets_tight = match_jets_to_vertex(VERTEX_FILE, event_index=37, vtx_z=vtx0.z, jet_pt_min=50.0)
+fig11 = trace.plot_vertex_detail(vtx_event_tight, vtx_index=0, jets=jets_tight)
+fig11.savefig(os.path.join(OUTDIR, "filter_vertex_tight.png"), dpi=150, bbox_inches="tight")
+print(f"  filter_vertex_tight.png ({len(vtx_event.tracks)} -> {len(vtx_event_tight.tracks)} tracks total, "
+      f"{len(jets)} -> {len(jets_tight)} jets on vertex 0)")
 
 print("\nAll documentation assets written to", OUTDIR)

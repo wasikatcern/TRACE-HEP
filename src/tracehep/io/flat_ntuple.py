@@ -2,6 +2,11 @@
 b-jets, muons, electrons, photons, MET as flat JET_pt/JET_eta/... branches,
 matched by a (run, event) pair rather than a plain row index) via uproot.
 
+The jet/b-jet branch name triples default to the ``JET_*``/``bJET_*``
+convention but can be overridden (``jet_branches``/``bjet_branches``) for
+ntuples that name their jet collection differently, e.g.
+``AntiKt4EMPFlowJet_pt``/``_eta``/``_phi``.
+
 Requires the ``delphes`` extra (uproot is shared with the Delphes loader):
 ``pip install trace-hep[delphes]``.
 
@@ -14,9 +19,7 @@ from ..models import Event, Jet, Lepton, Photon, MissingET
 
 __all__ = ["load_events_by_run_event", "load_event_by_run_event"]
 
-_OBJECT_BRANCHES = {
-    "jet": ("JET_pt", "JET_eta", "JET_phi"),
-    "bjet": ("bJET_pt", "bJET_eta", "bJET_phi"),
+_LEPTON_PHOTON_BRANCHES = {
     "muon": ("MU_pt", "MU_eta", "MU_phi"),
     "electron": ("EL_pt", "EL_eta", "EL_phi"),
     "photon": ("PH_pt", "PH_eta", "PH_phi"),
@@ -38,9 +41,20 @@ def load_events_by_run_event(
     run_event_pairs: Iterable[Tuple[int, int]],
     *,
     tree_name: str = "Ntuple",
+    jet_branches: Tuple[str, str, str] = ("JET_pt", "JET_eta", "JET_phi"),
+    bjet_branches: Tuple[str, str, str] = ("bJET_pt", "bJET_eta", "bJET_phi"),
     label: str = "",
 ) -> Dict[Tuple[int, int], Event]:
     """Scan a flat ntuple once for the requested (run, event) pairs.
+
+    Parameters
+    ----------
+    jet_branches, bjet_branches:
+        ``(pt, eta, phi)`` branch-name triples for the light-jet and b-jet
+        collections. Override these if the ntuple uses a different jet
+        collection/naming convention than the ``JET_*``/``bJET_*`` default,
+        e.g. ``jet_branches=("AntiKt4EMPFlowJet_pt", "AntiKt4EMPFlowJet_eta",
+        "AntiKt4EMPFlowJet_phi")``.
 
     Returns
     -------
@@ -54,8 +68,12 @@ def load_events_by_run_event(
 
     f = uproot.open(path)
     tree = f[tree_name]
+    object_branches = dict(_LEPTON_PHOTON_BRANCHES)
+    object_branches["jet"] = jet_branches
+    object_branches["bjet"] = bjet_branches
+
     branches = ["N_RUN", "N_EVENT"]
-    for pt, eta, phi in _OBJECT_BRANCHES.values():
+    for pt, eta, phi in object_branches.values():
         branches += [pt, eta, phi]
     branches += ["MET_met", "MET_eta", "MET_phi"]
 
@@ -72,7 +90,7 @@ def load_events_by_run_event(
                 continue
 
             objects = {}
-            for typ, (pt_b, eta_b, phi_b) in _OBJECT_BRANCHES.items():
+            for typ, (pt_b, eta_b, phi_b) in object_branches.items():
                 objects[typ] = list(zip(chunk[pt_b][i], chunk[eta_b][i], chunk[phi_b][i]))
 
             jets: List[Jet] = [Jet(pt=float(p), eta=float(e), phi=float(ph), btag=False)
@@ -97,9 +115,13 @@ def load_events_by_run_event(
 
 
 def load_event_by_run_event(path: str, run: int, event: int, *, tree_name: str = "Ntuple",
+                             jet_branches: Tuple[str, str, str] = ("JET_pt", "JET_eta", "JET_phi"),
+                             bjet_branches: Tuple[str, str, str] = ("bJET_pt", "bJET_eta", "bJET_phi"),
                              label: str = "") -> Event:
     """Load a single event by its (run, event) pair. Raises KeyError if not found."""
-    result = load_events_by_run_event(path, [(run, event)], tree_name=tree_name, label=label)
+    result = load_events_by_run_event(path, [(run, event)], tree_name=tree_name,
+                                       jet_branches=jet_branches, bjet_branches=bjet_branches,
+                                       label=label)
     try:
         return result[(run, event)]
     except KeyError:
