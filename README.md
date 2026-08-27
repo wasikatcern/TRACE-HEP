@@ -70,7 +70,11 @@ plot_vertices_3d(vtx_event).write_html("vertices_3d.html")
 `plot_vertices_zr`/`plot_vertices_3d` survey every vertex in the event.
 `plot_vertex_detail` instead zooms into *one* vertex and draws any jets
 already associated with it as cones, plus a sum(pT^2) / reco-z / truth-z
-annotation:
+annotation. Tracks and jets are each coloured by their own truth-level
+hard-scatter match (`Track.is_hs` / `Jet.is_hs`) when available, not by the
+owning vertex's overall flag -- a reconstructed "HS" vertex routinely
+contains a genuine mix of truth-HS and truth-PU tracks, and the jets
+matched to it are usually mostly-but-not-entirely truth-HS too:
 
 ```python
 from tracehep import plot_vertex_detail
@@ -90,6 +94,19 @@ an explicit, separate step rather than hidden inside `plot_vertex_detail`;
 bring your own jets (any list of `Jet`) if you have a different matching
 scheme, or if you're not using a calo-timing ntuple at all.
 
+Different ntuple productions name the jet collection and its
+constituent-track branch differently -- pass `jet_collection` and/or
+`track_idx_branch` to override the defaults
+(`jet_collection="AntiKt4EMTopoJets"`, and either `{jet_collection}_track_idx`
+or `{jet_collection}_ghostTrack_idx`, auto-detected):
+
+```python
+jets = match_jets_to_vertex(
+    "my_pileup_ntuple.root", event_index=37, vtx_z=vtx.z,
+    jet_collection="AntiKt4EMPFlowJets", track_idx_branch="AntiKt4EMPFlowJets_ghostTrack_idx",
+)
+```
+
 ## Displaced tracks
 
 `Track.d0` (transverse impact parameter) is a first-class field on every
@@ -108,6 +125,13 @@ Every drawing function accepts plain dataclasses from `tracehep.models`:
 interaction's objects) and `Vertex`, `TruthVertex`, `VertexEvent` (one
 pileup scenario's many vertices sharing a track collection). See
 `tracehep/models.py` for the full field list.
+
+`Jet.is_hs` and `Track.is_hs` carry each object's own truth-level
+hard-scatter match (`Optional[bool]`, `None` when truth information isn't
+available, e.g. on real data). The calo-timing loaders populate both from
+truth branches when present; vertex displays colour tracks and jets by
+these fields, falling back to the owning vertex's `is_hs`/`is_pu` flag only
+when an individual object has no truth match of its own.
 
 ## Status
 

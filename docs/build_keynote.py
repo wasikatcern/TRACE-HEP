@@ -174,7 +174,7 @@ deck = Deck()
 # ---------------------------------------------------------------------
 deck.title_slide(
     "TRACE-HEP",
-    "Comprehensive Documentation - v0.1.1 - Toolkit for Reading Annotated Collider-Event displays",
+    "Comprehensive Documentation - v0.1.5 - Toolkit for Reading Annotated Collider-Event displays",
 )
 
 deck.text_slide("What is TRACE-HEP?", [
@@ -217,15 +217,16 @@ pip install -e ".[dev]"
 pytest -q""")
 
 deck.code_slide("Verify the install", '''python3 -c "import tracehep as trace; print(trace.__version__)"
-# -> 0.1.1
+# -> 0.1.5
 
 trace-batch --help
 # -> usage: trace-batch [-h] --input FILE.root --indices N [N ...] ...''')
 
 # ---------------------------------------------------------------------
 deck.text_slide("The data model: one hard-scatter event", [
-    "Jet(pt, eta, phi, mass=0, btag=False)",
-    "Track(pt, eta, phi, charge=0, d0=0, z0=0, x=0, y=0, z=0, time=None)",
+    "Jet(pt, eta, phi, mass=0, btag=False, is_hs=None)",
+    "Track(pt, eta, phi, charge=0, d0=0, z0=0, x=0, y=0, z=0,",
+    "      time=None, is_hs=None)",
     "Lepton(pt, eta, phi, flavor=\"muon\"|\"electron\")",
     "Photon(pt, eta, phi)",
     "MissingET(pt, phi, eta=0)",
@@ -367,7 +368,7 @@ fig.savefig("vertex0_detail.png")''',
     note="match_jets_to_vertex associates jets by Rpt (track-pT-fraction) matching -- bring your own jets for a different scheme.")
 
 deck.image_slide("Output: single-vertex detail with jets", "vertex_detail.png",
-                  caption="Vertex 0 (HS): 10 jets matched, sum(pT^2) = 2.5e3 GeV^2 -- matches the original analysis exactly")
+                  caption="Vertex 0 (HS): 10 jets matched (9 truth-HS, 1 truth-PU), sum(pT^2) = 2.5e3 GeV^2 -- tracks and jets each coloured by their own truth match")
 
 # ---------------------------------------------------------------------
 deck.code_slide("Batch processing many events at once", '''from tracehep.io.delphes import load_events
@@ -435,7 +436,8 @@ deck.text_slide("Loader reference (tracehep.io)", [
     'calotiming.load_vertex_event(path, event_index,',
     '    tree_name="ntuple", label="")',
     "calotiming.match_jets_to_vertex(path, event_index, vtx_z,",
-    "    *, jet_pt_min=30.0, rpt_min=0.02, sig_cut=3.0)",
+    '    *, jet_collection="AntiKt4EMTopoJets", track_idx_branch=None,',
+    "    jet_pt_min=30.0, rpt_min=0.02, sig_cut=3.0)",
     "",
     "All four require: pip install \"trace-hep[delphes]\"",
 ], bullet=False, font="Menlo", font_size=16)
@@ -473,7 +475,7 @@ deck.text_slide("Get involved", [
     "Source:    github.com/wasikatcern/TRACE-HEP",
     "Install:   pip install trace-hep  (TestPyPI now; PyPI planned)",
     "License:   MIT",
-    "Tests:     pytest -q   (21 passing at v0.1.1)",
+    "Tests:     pytest -q   (26 passing at v0.1.5)",
     "Contact:   wasikul.islam@cern.ch",
     "",
     "Citing: accompanying paper citation to be added once posted.",
