@@ -22,10 +22,7 @@ mh.style.use("ATLAS")
 #mh.style.use("LHCb")
 #mh.style.use("ROOT")
 
-#root_file = uproot.open('../CaloTimingNtuple_ttbarSingleLep_FPT_n100_test_20241211.root')
-#root_file = uproot.open('../VBF_Higgs_Invis/user.scheong.42871997.Output._000050.SuperNtuple.root')
-#root_file = uproot.open('../VBF_Higgs_Invis/user.scheong.42774623.EXT0._000002.CaloTimingNtuple.root')
-root_file = uproot.open('/Users/wasikul/Desktop/4D_tracking/my_results/ttbar/user.scheong.42774615.EXT0._000002.CaloTimingNtuple.root')
+root_file = uproot.open('sample.root')
 
 tree = root_file["ntuple"]
 
@@ -42,39 +39,6 @@ args = parser.parse_args()
 event_num = args.event_num
 vtxID = args.vtxID
 
-################ Get AD loss value #############################################
-'''
-#def load_loss_values(file_path="AD_score_all_vertices.txt"):
-#def load_loss_values(file_path="AD_score_all_vertices_Noscale_v3.txt"):
-def load_loss_values(file_path="AD_all_vertices_sumptW_MLP_v1.txt"):
-    """Load loss values from text file into a dictionary"""
-    loss_dict = {}
-    try:
-        with open(file_path, 'r') as file:
-            # Skip header if exists
-            next(file, None)
-            for line in file:
-                parts = line.strip().split()
-                if len(parts) >= 3:
-                    event_id = int(parts[0])
-                    vertex_id = int(parts[1])
-                    loss = float(parts[2])
-                    loss_dict[(event_id, vertex_id)] = loss
-    except FileNotFoundError:
-        print(f"Warning: Could not find loss value file {file_path}")
-    return loss_dict
-
-# Load loss values at startup
-loss_dict = load_loss_values()
-
-# Get the loss value for the requested event/vertex
-loss_value = loss_dict.get((args.event_num, args.vtxID), None)
-
-if loss_value is not None:
-    print(f"Found AD loss value for event {args.event_num} vertex {args.vtxID}: {loss_value}")
-else:
-    print(f"No AD loss value found for event {args.event_num} vertex {args.vtxID}")
-'''
 #############################################################
 
 vtx_z = my_branches.RecoVtx_z[event_num][vtxID]
