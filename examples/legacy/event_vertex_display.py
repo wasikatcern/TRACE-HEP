@@ -16,6 +16,11 @@ import argparse
 import mplhep as mh
 
 mh.style.use("ATLAS")
+# Other mplhep styles available, if you'd rather use one of these instead:
+#mh.style.use("CMS")
+#mh.style.use("ALICE")
+#mh.style.use("LHCb")
+#mh.style.use("ROOT")
 
 #root_file = uproot.open('../CaloTimingNtuple_ttbarSingleLep_FPT_n100_test_20241211.root')
 #root_file = uproot.open('../VBF_Higgs_Invis/user.scheong.42871997.Output._000050.SuperNtuple.root')
@@ -144,15 +149,11 @@ for idx, z in enumerate(my_branches.TruthVtx_z[event_num]):
 # Get the tracks connected to the selected vertex
 connected_tracks = my_branches.RecoVtx_track_idx[event_num][vtxID]
 #print("no. of tracks:", len(my_branches.RecoVtx_track_idx[event_num][vtxID]))
-all_tracks = range(len(my_branches.Track_z0[event_num]))
-secondary_tracks = [track for track in all_tracks if track not in connected_tracks]
 
 track_info = []
 jet_info = []
 num_jets = 0
 new_sumpt=0
-sum_pt_W =0
-WAVeS_with_secondary = 0
 num_HS_tracks=0
 
 # -------------------------------
@@ -177,30 +178,15 @@ for idx in connected_tracks:
     my_track_z0.append(track_z0)
 
     ####################################################
-    ### Calculate minDR ################################
+    ### Associate jets to this vertex by Rpt ###########
     ####################################################
-    
-    minDr = 1000;
-    closestJetIndex = -1;
-    jpt_val = 0.0;
-
-    num_jet_match_01=0
-    num_jet_match_05=0
-    
-    njets_b1 = 0
-    njets_b2 = 0
 
     # Loop over jets
     for j in range(len(my_branches.AntiKt4EMTopoJets_track_idx[event_num])):
         if my_branches.AntiKt4EMTopoJets_pt[event_num][j] < 30.0: #default is 30.0 GeV
             continue
-        njets_b1=njets_b1+1
-    
-        trackPT0 = 0
-        trackPT = 0
-        jet_pt_05_rpt = 0
-        jet_pt_01_rpt = 0
 
+        trackPT = 0
         for q in range(len(my_branches.AntiKt4EMTopoJets_track_idx[event_num][j])):
             # Track selection cuts
             jdx = my_branches.AntiKt4EMTopoJets_track_idx[event_num][j][q]
@@ -208,17 +194,17 @@ for idx in connected_tracks:
             eta2 = -log(tan(my_branches.Track_theta[event_num][jdx] / 2))
             track_pT2 = p2 / cosh(eta2)
             pt2 = track_pT2 / 1000
-    
+
             delz = my_branches.Track_z0[event_num][jdx] - my_branches.RecoVtx_z[event_num][vtxID]
             signi_cut = delz / sqrt(my_branches.Track_var_z0[event_num][jdx])
-    
+
             if abs(signi_cut) > 3.0:
                 continue
             trackPT += pt2
-    
+
         Rpt = trackPT / my_branches.AntiKt4EMTopoJets_pt[event_num][j]
         #print("jet#", j, "jet_pt", my_branches.AntiKt4EMTopoJets_pt[event_num][j], "Rpt:", Rpt)
-            
+
         jet_pt = my_branches.AntiKt4EMTopoJets_pt[event_num][j]
         jet_eta = my_branches.AntiKt4EMTopoJets_eta[event_num][j]
         jet_phi = my_branches.AntiKt4EMTopoJets_phi[event_num][j]
@@ -233,65 +219,22 @@ for idx in connected_tracks:
         jet_x = (jet_pt / 40) * np.cos(jet_theta) * jet_signX
         jet_y = (jet_pt / 40) * np.sin(jet_theta) * jet_signY
         #print("Jet : ", " pt :", jet_pt, "eta :", jet_eta, "isHS :", jet_isHS_size)
-        
+
         jet_tuple = (jet_pt, jet_eta, jet_phi, jet_isHS_size, jet_x, jet_y, Rpt)
 
         if jet_tuple not in jet_info:
             jet_info.append(jet_tuple)
-        
+
         #num_jets += 1  # Increment counter
-        
+
         if Rpt < 0.02:
         #if Rpt < 0.00:
             continue
-            
-        #print("Jet : ", " pt :", jet_pt, "eta :", jet_eta, "isHS :", jet_isHS_size, "Rpt :", Rpt)
-            
+
     ####################################################
     ####################################################
-        njets_b2=njets_b2+1
 
-        deta = my_branches.AntiKt4EMTopoJets_eta[event_num][j] - track_eta
-        dphi = my_branches.AntiKt4EMTopoJets_phi[event_num][j] - my_branches.Track_phi[event_num][idx]
-        
-        if dphi > pi:
-            dphi -= 2 * pi
-        Dr = sqrt(deta**2 + dphi**2)
-    
-        # Check if the current jet is closer than the previously found closest jet
-        if Dr < minDr and Dr <= 0.8:
-        #if Dr < minDr:
-            minDr = Dr  # Update minimum Dr
-            closestJetIndex = j  # Update index of closest jet
-            jpt = my_branches.AntiKt4EMTopoJets_pt[event_num][closestJetIndex]
-            jpt_val = jpt
-    
-        jet_pt_01_rpt += my_branches.AntiKt4EMTopoJets_pt[event_num][j]
-        num_jet_match_01 += 1
 
-        print("jet#", j, "jet_pt", my_branches.AntiKt4EMTopoJets_pt[event_num][j], "jet_eta", my_branches.AntiKt4EMTopoJets_eta[event_num][j], "Rpt:", Rpt, "dR:", Dr)
-
-        if Rpt > 0.5:
-            jet_pt_05_rpt += my_branches.AntiKt4EMTopoJets_pt[event_num][j]
-            num_jet_match_05 += 1
-            
-    #print(njets_b1, njets_b2)
-    
-    if minDr == 1000:
-        minDr = 1.0
-
-    #print("minDr :", minDr)
-    #print("jpt :", jpt_val)
-
-    pt_W = (track_pT ** 2) * (jpt_val ** 2) / minDr
-    sum_pt_W = sum_pt_W+pt_W
-
-    print("pt_W :", pt_W)
-    
-    ####################################################
-    ####################################################
-    
-    
     new_sumpt= new_sumpt + (track_pT ** 2)
 
     pz = track_pT * math.sinh(track_eta)
@@ -314,68 +257,6 @@ for idx in connected_tracks:
     
     track_info.append([vtx_z, z0, x, y, status])
     #track_info.append(compute_track_line(track_pT, track_eta, track_phi, vtx_z, z0, status))
-
-# -------------------------------
-# Process secondary tracks
-# -------------------------------
-secondary_sumptW = 0
-
-for idx in secondary_tracks:
-    z0 = my_branches.Track_z0[event_num][idx]
-    dz = z0 - vtx_z
-    sigma = np.sqrt(my_branches.Track_var_z0[event_num][idx])
-    if abs(dz) > 2 or abs(dz / sigma) > 10: continue
-
-    p = abs(1 / my_branches.Track_qOverP[event_num][idx])
-    #eta = -np.log(np.tan(my_branches.Track_theta[event_num][idx] / 2))
-    track_theta = my_branches.Track_theta[event_num][idx]
-    eta = -np.log(math.tan((my_branches.Track_theta[event_num][idx]) / 2))
-
-    phi = my_branches.Track_phi[event_num][idx]
-    pt = (p / np.cosh(eta)) / 1000
-    if pt < 1.0: continue
-
-    minDr = 1e9
-    jpt = 0.0
-    closeset_jet_id= -1
-    for j in range(len(my_branches.AntiKt4EMTopoJets_pt[event_num])):
-        if my_branches.AntiKt4EMTopoJets_pt[event_num][j] < 30: continue
-        #if my_branches.AntiKt4EMTopoJets_HadronConeExclTruthLabelID[event_num][j] != 5: continue
-        dphi = my_branches.AntiKt4EMTopoJets_phi[event_num][j] - phi
-        dphi = (dphi + pi) % (2*pi) - pi
-        deta = my_branches.AntiKt4EMTopoJets_eta[event_num][j] - eta
-        dr = np.sqrt(dphi**2 + deta**2)
-        if dr < minDr and dr < 0.4:
-            minDr = dr
-            jpt = my_branches.AntiKt4EMTopoJets_pt[event_num][j]
-            closeset_jet_id = j
-
-    if jpt == 0.0: continue
-    Rpt = 10000 #Random nulber!
-    # Check if any existing jet in jet_info already has the same jet_pt
-    if not any(abs(j[0] - jet_pt) < 1e-3 for j in jet_info):  # use small epsilon for float comparison
-        jet_tuple = (jet_pt, jet_eta, jet_phi, jet_isHS_size, jet_x, jet_y, Rpt)
-        jet_info.append(jet_tuple)
-
-    weight = max(1.0, (jpt * jpt) / minDr)
-    secondary_sumptW += pt ** 2 * weight
-
-    pz = pt * math.sinh(eta)
-    signX = eta / abs(eta) if eta != 0 else 1
-    signY = math.sin(phi) / abs(math.sin(phi)) if math.sin(phi) != 0 else 1
-    theta = math.atan(pt / abs(pz))
-    x = (pt / 2) * math.cos(theta) * signX
-    y = (pt / 2) * math.sin(theta) * signY
-    track_info.append([vtx_z, 0.0, x, y, 100])
-    
-
-#sum_pt_W += secondary_sumptW
-print("WAVeS", sum_pt_W)
-WAVeS_with_secondary = WAVeS_with_secondary + sum_pt_W + secondary_sumptW
-print("WAVeS_with_secondary", WAVeS_with_secondary)
-
-    
-#print("jet_pt_list size: ", len(jet_pt_list))
 
 print("number of HS tracks : ", num_HS_tracks)
 
@@ -495,26 +376,16 @@ y_coord = 0.9  # Set the y-coordinate for the text annotations
 plt.text(x_coord, y_coord, f"Reco z = {vtx_z:.1f} mm", weight='bold', fontsize=12)
 plt.text(x_coord, y_coord - 0.1, f"Truth z = {truth_z:.1f} mm", weight='bold', fontsize=12)
 #plt.text(x_coord, y_coord - 0.2, f"Sum $\\mathbf{{p_T^2}}$ = {new_sumpt:.1e} $\\mathbf{{GeV^2}}$", weight='bold', fontsize=12)
-#plt.text(x_coord, y_coord - 0.3, f"WAVeS = {sum_pt_W:.1e} $\\mathbf{{GeV^4}}$", weight='bold', fontsize=12)
 #plt.text(x_coord, y_coord - 0.4, f"AD score = {loss_value:.2f}", weight='bold', fontsize=12)
 
 m1, e1 = f"{new_sumpt:.1e}".split("e")
 e1 = int(e1)
-
-m2, e2 = f"{WAVeS_with_secondary:.1e}".split("e")
-e2 = int(e2)
 
 plt.text(
     x_coord, y_coord - 0.2,
     rf"$\sum \mathbf{{p_T^2}}$ = $\mathbf{{{m1}\times 10^{{{e1}}}\ \mathbf{{GeV^2}}}}$",
     weight='bold', fontsize=12
 )
-
-#plt.text(
-#    x_coord, y_coord - 0.3,
-#    rf"WAVeS = $\mathbf{{{m2}\times 10^{{{e2}}}\ \mathbf{{GeV^4}}}}$",
-#    weight='bold', fontsize=12
-#)
 
 ################## Add tracks and jets legend ###################
 
@@ -576,15 +447,6 @@ plt.legend()
 plt.tight_layout()
 
 #plt.grid(True)
-#plt.savefig(f'figures/fig_{event_num}_{vtxID}_sumpt2.png')
-#plt.savefig(f'plots/low/fig_{event_num}_{vtxID}.png')
-#plt.savefig(f'plots/mid/fig_{event_num}_{vtxID}.png')
-#plt.savefig(f'plots/high/fig_{event_num}_{vtxID}.png')
-#plt.savefig(f'figures/failed_sumptW_1vtx/fig_{event_num}_{vtxID}.png')
-#plt.savefig(f'figures/failed_sumptW_2vtx_AD1/fig_{event_num}_{vtxID}.png')
-#plt.savefig(f'figures/failed_sumptW_2vtx_AD2/fig_{event_num}_{vtxID}.png')
-#plt.savefig(f'figures/high_loss_low_SumptW/fig_{event_num}_{vtxID}.png')
-#plt.savefig(f'fig_{event_num}_{vtxID}.png')
 plt.savefig(f'tt_fig_{event_num}_{vtxID}.png')
 
 
