@@ -11,3 +11,6 @@ venv/
 *.html
 docs/_build_keynote.applescript
 docs/assets/
+docs/TRACE-HEP_Documentation.key
+docs/build_keynote.py
+docs/generate_doc_assets.py
