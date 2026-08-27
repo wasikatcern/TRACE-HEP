@@ -7,8 +7,6 @@ event and vertex displays: polar (phi, |eta|) views, beam-axis 2D
 projections, and interactive 3D views, plus a companion family of
 per-vertex / all-vertices displays for pileup diagnostics.
 
-Developed by Wasikul Islam, PhD.
-
 ## Install
 
 ```bash
