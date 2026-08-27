@@ -65,6 +65,31 @@ plot_vertices_zr(vtx_event, style="styled").savefig("vertices.png")
 plot_vertices_3d(vtx_event).write_html("vertices_3d.html")
 ```
 
+### One vertex, with its associated jets
+
+`plot_vertices_zr`/`plot_vertices_3d` survey every vertex in the event.
+`plot_vertex_detail` instead zooms into *one* vertex and draws any jets
+already associated with it as cones, plus a sum(pT^2) / reco-z / truth-z
+annotation:
+
+```python
+from tracehep import plot_vertex_detail
+from tracehep.io.calotiming import match_jets_to_vertex
+
+vtx = vtx_event.vertices[0]
+jets = match_jets_to_vertex("my_pileup_ntuple.root", event_index=37, vtx_z=vtx.z)
+
+plot_vertex_detail(vtx_event, vtx_index=0, jets=jets).savefig("vertex0_detail.png")
+```
+
+`match_jets_to_vertex` associates jets to a vertex by Rpt (the fraction of a
+jet's pT carried by tracks compatible with that vertex's z) -- the same
+matching used to build the original single-vertex displays this function
+replaces. Jet-to-vertex association is analysis-specific, so it's kept as
+an explicit, separate step rather than hidden inside `plot_vertex_detail`;
+bring your own jets (any list of `Jet`) if you have a different matching
+scheme, or if you're not using a calo-timing ntuple at all.
+
 ## Displaced tracks
 
 `Track.d0` (transverse impact parameter) is a first-class field on every

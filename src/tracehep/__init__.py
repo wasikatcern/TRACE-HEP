@@ -16,11 +16,11 @@ from .models import Event, Jet, Lepton, MissingET, Photon, Track, TruthVertex, V
 from .polar import plot_event_polar
 from .beam2d import plot_event_beam2d
 from .view3d import plot_event_3d
-from .vertices.zr import plot_vertices_zr
+from .vertices.zr import plot_vertices_zr, plot_vertex_detail
 from .vertices.view3d import plot_vertices_3d
 from .colors import DEFAULT_COLORS, TRACK_COLOR, DISPLACED_COLOR
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 __all__ = [
     "__version__",
@@ -29,7 +29,7 @@ __all__ = [
     "Vertex", "TruthVertex", "VertexEvent",
     # drawing
     "plot_event_polar", "plot_event_beam2d", "plot_event_3d",
-    "plot_vertices_zr", "plot_vertices_3d",
+    "plot_vertices_zr", "plot_vertex_detail", "plot_vertices_3d",
     # colours
     "DEFAULT_COLORS", "TRACK_COLOR", "DISPLACED_COLOR",
 ]

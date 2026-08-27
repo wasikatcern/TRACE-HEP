@@ -7,7 +7,7 @@ Developed by Wasikul Islam, PhD.
 """
 
 import math
-from typing import Optional
+from typing import Optional, Sequence
 
 import matplotlib
 import matplotlib.cm as cm
@@ -15,27 +15,32 @@ import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 
-from ..models import VertexEvent
+from ..colors import DEFAULT_COLORS
+from ..models import Jet, VertexEvent
 
-__all__ = ["plot_vertices_zr"]
+__all__ = ["plot_vertices_zr", "plot_vertex_detail"]
 
 COLOR_HS = "#2a78d6"
 COLOR_PU = "#e34948"
 
 
-def _track_offset(track):
-    """Schematic (dz, dr) offset of one track from its vertex's z position,
-    scaled by pT/eta -- not a physical trajectory, purely a visibility
-    convention shared with the rest of tracehep."""
-    eta = track.eta if track.eta != 0 else 1e-9
-    pz = track.pt * math.sinh(eta)
+def _schematic_offset(pt: float, eta: float, phi: float, scale: float):
+    """Schematic (dz, dr) offset from a vertex position, scaled by pT/eta --
+    not a physical trajectory, purely a visibility convention shared with
+    the rest of tracehep. ``scale`` controls how far pT=1 GeV reaches."""
+    eta = eta if eta != 0 else 1e-9
+    pz = pt * math.sinh(eta)
     sign_x = eta / abs(eta)
-    sin_phi = math.sin(track.phi)
+    sin_phi = math.sin(phi)
     sign_y = sin_phi / abs(sin_phi) if sin_phi != 0 else 1.0
-    theta = math.atan(track.pt / max(abs(pz), 1e-9))
-    dz = (track.pt / 2) * math.cos(theta) * sign_x
-    dr = (track.pt / 2) * math.sin(theta) * sign_y
+    theta = math.atan(pt / max(abs(pz), 1e-9))
+    dz = (pt / scale) * math.cos(theta) * sign_x
+    dr = (pt / scale) * math.sin(theta) * sign_y
     return dz, dr
+
+
+def _track_offset(track):
+    return _schematic_offset(track.pt, track.eta, track.phi, scale=2.0)
 
 
 def plot_vertices_zr(
@@ -150,6 +155,110 @@ def plot_vertices_zr(
         parts = [vertex_event.label, f"N_vtx={len(vertex_event.vertices)}"]
         if vertex_event.mu is not None:
             parts.append(f"<mu>={vertex_event.mu:.0f}")
+        title = ", ".join(p for p in parts if p)
+    ax.set_title(title)
+    fig.tight_layout()
+    return fig
+
+
+def plot_vertex_detail(
+    vertex_event: VertexEvent,
+    vtx_index: int,
+    jets: Sequence[Jet] = (),
+    *,
+    zoom_range_mm: float = 5.0,
+    ax: Optional["plt.Axes"] = None,
+    title: Optional[str] = None,
+):
+    """Detailed single-vertex display: this vertex's own tracks, plus any
+    jets already associated with it, drawn as cones -- the companion to
+    :func:`plot_vertices_zr` for inspecting *one* vertex closely (jets,
+    sum(pT^2), nearest truth vertex) rather than surveying every vertex in
+    the event.
+
+    Jet-to-vertex association (e.g. by track-pT-fraction/Rpt matching) is
+    deliberately left to the caller or a loader-specific helper -- it is
+    analysis-specific, unlike everything else this function draws.
+
+    Parameters
+    ----------
+    vertex_event:
+        The event containing the vertex to draw.
+    vtx_index:
+        Index into ``vertex_event.vertices`` of the vertex to draw.
+    jets:
+        Jets already associated with this vertex, drawn as cones from its
+        position. Coloured by :class:`~tracehep.models.Jet`.btag.
+    zoom_range_mm:
+        The x-axis is limited to ``[vtx.z - zoom_range_mm, vtx.z + zoom_range_mm]``.
+    title:
+        Plot title. Defaults to a string built from vertex_event.label /
+        vtx_index if omitted.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
+    """
+    vtx = vertex_event.vertices[vtx_index]
+
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(12, 6))
+    else:
+        fig = ax.figure
+
+    track_color = COLOR_HS if vtx.is_hs else COLOR_PU
+    for ti in vtx.track_indices:
+        if ti >= len(vertex_event.tracks):
+            continue
+        dz, dr = _track_offset(vertex_event.tracks[ti])
+        ax.plot([vtx.z, vtx.z + dz], [0, dr], color=track_color, linewidth=1.2)
+
+    for eta_ref, ls in [(2.5, "dashed"), (4.0, "dotted")]:
+        theta = 2 * math.atan(math.exp(-eta_ref))
+        x_ref, y_ref = 50.0 * math.cos(theta), 50.0 * math.sin(theta)
+        for sign in (1, -1):
+            ax.plot([vtx.z, vtx.z + x_ref], [0, sign * y_ref], linestyle=ls, color="lightgrey", linewidth=1)
+            ax.plot([vtx.z, vtx.z - x_ref], [0, sign * y_ref], linestyle=ls, color="lightgrey", linewidth=1)
+        ax.text(vtx.z + zoom_range_mm * 0.55, -0.9 - 0.06 * (eta_ref - 2.5), rf"$\eta={eta_ref:g}$",
+                fontsize=10, color="lightgrey")
+
+    jet_labels = []
+    for j in jets:
+        dz, dr = _schematic_offset(j.pt, j.eta, j.phi, scale=40.0)
+        length = math.hypot(dz, dr)
+        width = length * 0.3
+        norm = max(length, 1e-9)
+        perp_x, perp_y = -dr / norm * width / 2, dz / norm * width / 2
+        color = DEFAULT_COLORS["bjet"] if j.btag else DEFAULT_COLORS["jet"]
+        ax.fill([vtx.z, vtx.z + dz + perp_x, vtx.z + dz - perp_x],
+                [0, dr + perp_y, dr - perp_y], color=color, alpha=0.5)
+        jet_labels.append((f"Jet {len(jet_labels) + 1}: pT={j.pt:.0f} GeV, eta={j.eta:.1f}"
+                            + (" (b)" if j.btag else ""), color))
+
+    x0 = vtx.z - zoom_range_mm
+    ax.text(x0 + 0.1, 0.95, f"Reco z = {vtx.z:.1f} mm", fontsize=11, weight="bold")
+    nearest_truth = min(vertex_event.truth_vertices, key=lambda tv: abs(tv.z - vtx.z), default=None)
+    if nearest_truth is not None:
+        ax.text(x0 + 0.1, 0.85, f"Truth z = {nearest_truth.z:.1f} mm", fontsize=11, weight="bold")
+    ax.text(x0 + 0.1, 0.75, rf"$\sum p_T^2$ = {vtx.sum_pt2:.1e} GeV$^2$", fontsize=11, weight="bold")
+    for k, (label, color) in enumerate(jet_labels):
+        ax.text(x0 + 0.1, 0.55 - k * 0.12, label, fontsize=10, weight="bold", color=color)
+
+    ax.legend(handles=[
+        plt.Line2D([], [], color=COLOR_HS, label="HS vertex tracks"),
+        plt.Line2D([], [], color=COLOR_PU, label="PU vertex tracks"),
+        plt.Rectangle((0, 0), 1, 1, color=DEFAULT_COLORS["jet"], alpha=0.5, label="Jet"),
+        plt.Rectangle((0, 0), 1, 1, color=DEFAULT_COLORS["bjet"], alpha=0.5, label="b-jet"),
+    ], loc="upper right", fontsize=9)
+
+    ax.axhline(y=0.0, color="black", linestyle="--", linewidth=0.8)
+    ax.set_xlabel("Z [mm]")
+    ax.set_ylabel("R [mm]")
+    ax.set_xlim(x0, vtx.z + zoom_range_mm)
+    ax.set_ylim(-1.0, 1.0)
+
+    if title is None:
+        parts = [vertex_event.label, f"vertex {vtx_index}", "HS" if vtx.is_hs else "PU"]
         title = ", ".join(p for p in parts if p)
     ax.set_title(title)
     fig.tight_layout()

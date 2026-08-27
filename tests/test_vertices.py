@@ -2,8 +2,8 @@ import matplotlib.figure
 import plotly.graph_objects as go
 import pytest
 
-from tracehep.models import Track, TruthVertex, Vertex, VertexEvent
-from tracehep.vertices.zr import plot_vertices_zr
+from tracehep.models import Jet, Track, TruthVertex, Vertex, VertexEvent
+from tracehep.vertices.zr import plot_vertices_zr, plot_vertex_detail
 from tracehep.vertices.view3d import plot_vertices_3d
 
 
@@ -45,3 +45,25 @@ def test_plot_vertices_3d_returns_figure(sample_vertex_event):
     fig = plot_vertices_3d(sample_vertex_event)
     assert isinstance(fig, go.Figure)
     assert len(fig.data) > 0
+
+
+def test_plot_vertex_detail_returns_figure(sample_vertex_event):
+    fig = plot_vertex_detail(sample_vertex_event, vtx_index=0)
+    assert isinstance(fig, matplotlib.figure.Figure)
+
+
+def test_plot_vertex_detail_with_jets(sample_vertex_event):
+    jets = [Jet(pt=80, eta=0.4, phi=0.2, btag=True), Jet(pt=40, eta=-1.0, phi=1.5)]
+    fig = plot_vertex_detail(sample_vertex_event, vtx_index=0, jets=jets)
+    ax = fig.axes[0]
+    assert "vertex 0" in ax.get_title()
+    # 2 jet cones (fill) + track lines should all have been drawn without error
+    assert len(ax.patches) >= 2
+
+
+def test_plot_vertex_detail_zoom_range(sample_vertex_event):
+    fig = plot_vertex_detail(sample_vertex_event, vtx_index=0, zoom_range_mm=3.0)
+    ax = fig.axes[0]
+    xlim = ax.get_xlim()
+    assert xlim[0] == pytest.approx(-5.0)
+    assert xlim[1] == pytest.approx(1.0)

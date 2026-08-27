@@ -12,11 +12,12 @@ Requires the ``delphes`` extra (uproot is shared): ``pip install trace-hep[delph
 Developed by Wasikul Islam, PhD.
 """
 
-from typing import Dict
+import math
+from typing import Dict, List
 
-from ..models import Track, TruthVertex, Vertex, VertexEvent
+from ..models import Jet, Track, TruthVertex, Vertex, VertexEvent
 
-__all__ = ["load_vertex_event"]
+__all__ = ["load_vertex_event", "match_jets_to_vertex"]
 
 _BRANCHES = [
     "RecoVtx_z", "RecoVtx_x", "RecoVtx_y", "RecoVtx_sumPt2", "RecoVtx_isHS", "RecoVtx_isPU",
@@ -24,6 +25,12 @@ _BRANCHES = [
     "Track_pt", "Track_eta", "Track_phi", "Track_d0", "Track_z0", "Track_time", "Track_hasValidTime",
     "TruthVtx_z", "TruthVtx_x", "TruthVtx_y", "TruthVtx_isHS",
     "averageInteractionsPerCrossing",
+]
+
+_JET_BRANCHES = [
+    "AntiKt4EMTopoJets_pt", "AntiKt4EMTopoJets_eta", "AntiKt4EMTopoJets_phi",
+    "AntiKt4EMTopoJets_track_idx",
+    "Track_pt", "Track_z0", "Track_var_z0",
 ]
 
 
@@ -94,3 +101,55 @@ def load_vertex_event(path: str, event_index: int, *, tree_name: str = "ntuple",
 
     mu = float(arrs["averageInteractionsPerCrossing"][i])
     return VertexEvent(vertices=vertices, tracks=tracks, truth_vertices=truth_vertices, mu=mu, label=label)
+
+
+def match_jets_to_vertex(
+    path: str,
+    event_index: int,
+    vtx_z: float,
+    *,
+    tree_name: str = "ntuple",
+    jet_pt_min: float = 30.0,
+    rpt_min: float = 0.02,
+    sig_cut: float = 3.0,
+) -> List[Jet]:
+    """Associate reconstructed jets to one vertex by Rpt: the fraction of a
+    jet's pT carried by its constituent tracks that are compatible with
+    this vertex's z position (|z0 - vtx_z| / sigma(z0) <= sig_cut). This is
+    the same track-pT-fraction matching used to build the original
+    single-vertex-with-jets displays, factored out here as an explicit,
+    reusable step rather than hidden inside a loader -- association logic
+    like this is analysis-specific, unlike everything :func:`plot_vertex_detail`
+    draws.
+
+    Returns
+    -------
+    list of tracehep.models.Jet, each with pt >= jet_pt_min and
+    Rpt >= rpt_min, for use with :func:`tracehep.vertices.zr.plot_vertex_detail`.
+    """
+    uproot = _require_uproot()
+    f = uproot.open(path)
+    tree = f[tree_name]
+    arrs = tree.arrays(_JET_BRANCHES, entry_start=event_index, entry_stop=event_index + 1)
+    i = 0
+
+    jets = []
+    n_jets = len(arrs["AntiKt4EMTopoJets_pt"][i])
+    for j in range(n_jets):
+        jet_pt = float(arrs["AntiKt4EMTopoJets_pt"][i][j])
+        if jet_pt < jet_pt_min:
+            continue
+        track_pt_sum = 0.0
+        for tidx in arrs["AntiKt4EMTopoJets_track_idx"][i][j]:
+            tidx = int(tidx)
+            delz = float(arrs["Track_z0"][i][tidx]) - vtx_z
+            sigma = math.sqrt(max(float(arrs["Track_var_z0"][i][tidx]), 1e-12))
+            if abs(delz / sigma) > sig_cut:
+                continue
+            track_pt_sum += float(arrs["Track_pt"][i][tidx])
+        rpt = track_pt_sum / jet_pt
+        if rpt < rpt_min:
+            continue
+        jets.append(Jet(pt=jet_pt, eta=float(arrs["AntiKt4EMTopoJets_eta"][i][j]),
+                         phi=float(arrs["AntiKt4EMTopoJets_phi"][i][j])))
+    return jets
