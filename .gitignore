@@ -9,3 +9,5 @@ venv/
 .DS_Store
 *.png
 *.html
+docs/_build_keynote.applescript
+docs/assets/
