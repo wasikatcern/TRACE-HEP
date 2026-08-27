@@ -174,7 +174,7 @@ deck = Deck()
 # ---------------------------------------------------------------------
 deck.title_slide(
     "TRACE-HEP",
-    "Comprehensive Documentation - v0.1.7 - Toolkit for Reading Annotated Collider-Event displays",
+    "Comprehensive Documentation - v0.1.7 - Toolkit for Rendering and Analysis of Collider Events",
 )
 
 deck.text_slide("What is TRACE-HEP?", [

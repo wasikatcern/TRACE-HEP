@@ -1,5 +1,6 @@
-"""TRACE: a lightweight toolkit for reconstructed-level collider-event and
-vertex displays.
+"""TRACE (Toolkit for Rendering and Analysis of Collider Events): a
+lightweight toolkit for reconstructed-level collider-event and vertex
+displays.
 
     import tracehep as trace
 

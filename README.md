@@ -1,6 +1,6 @@
 # TRACE
 
-**T**oolkit for **R**eading **A**nnotated **C**ollider-**E**vent displays.
+**T**oolkit for **R**endering **a**nd **A**nalysis of **C**ollider **E**vents.
 
 A lightweight, format-agnostic library for reconstructed-level collider
 event and vertex displays: polar (phi, |eta|) views, beam-axis 2D

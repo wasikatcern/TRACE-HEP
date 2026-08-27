@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "trace-hep"
 version = "0.1.7"
-description = "TRACE: a lightweight toolkit for reconstructed-level collider-event and vertex displays"
+description = "TRACE: Toolkit for Rendering and Analysis of Collider Events -- a lightweight library for reconstructed-level collider-event and vertex displays"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.9"
