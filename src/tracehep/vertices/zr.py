@@ -119,7 +119,7 @@ def plot_vertices_zr(
 
     for vtx in vertex_event.vertices:
         if style == "styled":
-            size = 5 + 3.0 * math.sqrt(max(vtx.sum_pt2, 0.0))
+            size = min(3.0 + 1.0 * math.sqrt(max(vtx.sum_pt2, 0.0)), 25.0)
         else:
             size = 5
         ax.plot([vtx.z], [0], "o", color="#444444" if style == "styled" else "black",

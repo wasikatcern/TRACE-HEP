@@ -174,7 +174,7 @@ deck = Deck()
 # ---------------------------------------------------------------------
 deck.title_slide(
     "TRACE-HEP",
-    "Comprehensive Documentation - v0.1.6 - Toolkit for Reading Annotated Collider-Event displays",
+    "Comprehensive Documentation - v0.1.7 - Toolkit for Reading Annotated Collider-Event displays",
 )
 
 deck.text_slide("What is TRACE-HEP?", [
@@ -217,7 +217,7 @@ pip install -e ".[dev]"
 pytest -q""")
 
 deck.code_slide("Verify the install", '''python3 -c "import tracehep as trace; print(trace.__version__)"
-# -> 0.1.6
+# -> 0.1.7
 
 trace-batch --help
 # -> usage: trace-batch [-h] --input FILE.root --indices N [N ...] ...''')
@@ -562,7 +562,7 @@ deck.text_slide("Get involved", [
     "Source:    github.com/wasikatcern/TRACE-HEP",
     "Install:   pip install trace-hep  (TestPyPI now; PyPI planned)",
     "License:   MIT",
-    "Tests:     pytest -q   (32 passing at v0.1.6)",
+    "Tests:     pytest -q   (32 passing at v0.1.7)",
     "Contact:   wasikul.islam@cern.ch",
     "",
     "Citing: accompanying paper citation to be added once posted.",

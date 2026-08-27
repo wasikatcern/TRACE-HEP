@@ -30,7 +30,7 @@ def _to_plot(px, py, pz):
 
 
 def _vsize(sum_pt2: float) -> float:
-    return 4 + 2.2 * math.sqrt(max(sum_pt2, 0.0))
+    return min(3.0 + 1.0 * math.sqrt(max(sum_pt2, 0.0)), 18.0)
 
 
 def plot_vertices_3d(vertex_event: VertexEvent, *, title: Optional[str] = None) -> go.Figure:
