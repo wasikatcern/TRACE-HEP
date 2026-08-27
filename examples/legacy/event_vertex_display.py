@@ -339,8 +339,6 @@ x_coord = vtx_z-4.8  # Set it to the minimum x-coordinate of the line_positions
 y_coord = 0.9  # Set the y-coordinate for the text annotations
 plt.text(x_coord, y_coord, f"Reco z = {vtx_z:.1f} mm", weight='bold', fontsize=12)
 plt.text(x_coord, y_coord - 0.1, f"Truth z = {truth_z:.1f} mm", weight='bold', fontsize=12)
-#plt.text(x_coord, y_coord - 0.2, f"Sum $\\mathbf{{p_T^2}}$ = {new_sumpt:.1e} $\\mathbf{{GeV^2}}$", weight='bold', fontsize=12)
-#plt.text(x_coord, y_coord - 0.4, f"AD score = {loss_value:.2f}", weight='bold', fontsize=12)
 
 m1, e1 = f"{new_sumpt:.1e}".split("e")
 e1 = int(e1)
