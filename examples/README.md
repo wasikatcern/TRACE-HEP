@@ -32,6 +32,18 @@ vertex-detail plot. Read the module docstring in
 tracks, so only the hard-scatter vertex has real track content here (this
 was verified against real files, not assumed).
 
+## failure_mode_gallery_demo.py
+
+Builds a single, self-contained, browsable HTML gallery from a list of
+event numbers, categorized by why two "algorithms" (stand-ins for e.g. two
+ML classifiers, or a cut-based selection vs. an anomaly score) agree or
+disagree on each event -- exactly the "why did algorithm 1 fail this event
+but algorithm 2 passed it?" failure-mode question. Point `PATH` at your
+own sample and swap `algo1_pass`/`algo2_pass` for your real per-event
+results; everything else (categorizing, rendering, browsing) is generic.
+See `tracehep.gallery` for the full API (`build_gallery`,
+`compare_pass_fail`).
+
 ## legacy/
 
 `legacy/event_vertex_display.py` (originally `event_display_tt_R25.py`) is

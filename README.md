@@ -282,6 +282,60 @@ Delphes loader and `jet_collection`/`track_idx_branch` above for
 `match_jets_to_vertex`; the flat-ntuple loader takes the analogous
 `jet_branches`/`bjet_branches` (see `tracehep/io/flat_ntuple.py`).
 
+## Failure-mode / anomaly review: a browsable gallery of many events
+
+The recurring question this solves: *"algorithm 1 failed these events but
+algorithm 2 passed them -- what do they actually look like?"* (or, for an
+anomaly-detection study, *"here are 400 events flagged anomalous, let's
+eyeball them"*). `tracehep.gallery` turns a list of event numbers plus a
+category per event into one self-contained, portable HTML file -- no
+folder of hundreds of loose PNGs to manage, and no new dependency:
+
+```python
+import tracehep as trace
+from tracehep.io.delphes import load_events
+from tracehep.gallery import build_gallery, compare_pass_fail
+
+events = load_events("my_sample.root", indices=range(500), with_tracks=True)
+
+# your real per-event pass/fail results, e.g. from two ML classifiers
+algo1_pass = {i: my_classifier_1.passes(i) for i in events}
+algo2_pass = {i: my_classifier_2.passes(i) for i in events}
+categories = compare_pass_fail(algo1_pass, algo2_pass, name_a="clf1", name_b="clf2")
+
+build_gallery(
+    events, categories,
+    plot_fn=lambda ev: trace.plot_event_polar(ev, show_tracks=True),
+    output_path="review.html",
+    title="clf1 vs. clf2 disagreement review",
+)
+```
+
+Open `review.html` in any browser: filter by category (`clf1_pass_clf2_fail`,
+`clf1_fail_clf2_pass`, `both_pass`, `both_fail`), search/jump to an event
+number, click a thumbnail to page through a full-size lightbox with the
+arrow keys, and click "Download" on any image you want to keep -- nothing
+is written to disk until you click it.
+
+`compare_pass_fail` builds the four-category split for a 2-algorithm
+comparison; for a single-bucket anomaly-detection review (or any other
+grouping), just build the `{event_id: label}` mapping yourself --
+`build_gallery` doesn't care where the labels came from:
+
+```python
+categories = {eid: "anomalous" for eid in anomalous_event_numbers}
+build_gallery(events, categories, plot_fn=trace.plot_event_polar, output_path="anomalies.html")
+```
+
+`plot_fn` can be any callable returning a matplotlib or plotly figure --
+`plot_event_polar`, `plot_event_beam2d`, `plot_vertices_zr`, a
+`lambda ev: plot_vertex_detail(ev, vtx_index=0)`, or your own function.
+Every image is embedded directly in the HTML, so file size scales with
+event count x `dpi`; the default (100) is fine for dozens of events, but
+drop to 60-80 for hundreds-to-thousands to keep the file a reasonable size
+and the browser responsive (measured: ~150 KB/event at dpi=100 for a
+polar view with tracks, ~95 KB/event at dpi=70).
+
 ## Data model
 
 Every drawing function accepts plain dataclasses from `tracehep.models`:
