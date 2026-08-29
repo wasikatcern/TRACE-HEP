@@ -15,3 +15,8 @@ docs/assets/
 docs/TRACE-HEP_Documentation.key
 docs/build_keynote.py
 docs/generate_doc_assets.py
+
+# docs/site/ is the GitHub Pages showcase -- re-include it despite the
+# blanket *.png/*.html ignores above (must come after them to win).
+!docs/site/
+!docs/site/**

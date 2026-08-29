@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TRACE-HEP -- collider event &amp; vertex displays</title>
+<meta name="description" content="A lightweight, format-agnostic Python toolkit for reconstructed-level collider event and vertex displays, with a live interactive GUI.">
+<style>
+  :root {
+    --bg: #f7f7f8; --surface: #ffffff; --ink: #1a1a1a; --muted: #6b6b6b;
+    --border: #e2e2e4; --accent: #2a78d6; --accent-dark: #1d5aa8; --good: #2ca02c;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.55;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+  code, pre { font-family: Menlo, Consolas, monospace; }
+
+  header.top {
+    position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(6px); border-bottom: 1px solid var(--border);
+  }
+  header.top .wrap { display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; }
+  .brand { font-weight: 700; font-size: 16px; letter-spacing: -0.01em; }
+  .brand span { color: var(--accent); }
+  nav.links { display: flex; gap: 20px; font-size: 14px; font-weight: 500; }
+
+  .hero { padding: 72px 0 56px 0; text-align: center; }
+  .hero h1 {
+    font-size: clamp(32px, 5vw, 48px); margin: 0 0 14px 0; letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+  .hero .tagline {
+    font-size: 19px; color: var(--muted); max-width: 640px; margin: 0 auto 28px auto;
+  }
+  .hero .cta-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 22px; }
+  .btn {
+    display: inline-block; padding: 11px 22px; border-radius: 8px; font-size: 14px; font-weight: 600;
+    border: 1px solid var(--border);
+  }
+  .btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
+  .btn.primary:hover { background: var(--accent-dark); text-decoration: none; }
+  .btn.ghost { background: var(--surface); color: var(--ink); }
+  .btn.ghost:hover { background: var(--bg); text-decoration: none; }
+  .install-box {
+    display: inline-flex; align-items: center; gap: 10px; background: #111318; color: #e8e8ea;
+    padding: 10px 16px; border-radius: 8px; font-size: 14px; margin: 0 auto;
+  }
+  .install-box .prompt { color: #6ee7b7; }
+
+  section { padding: 48px 0; }
+  section.alt { background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  h2 { font-size: 26px; margin: 0 0 6px 0; letter-spacing: -0.01em; }
+  .section-sub { color: var(--muted); font-size: 15px; margin: 0 0 32px 0; max-width: 680px; }
+
+  .shot-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px;
+  }
+  .shot-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+    min-width: 0;
+  }
+  .shot-card img { width: 100%; max-width: 100%; height: auto; display: block; border-bottom: 1px solid var(--border); background: #fafafa; }
+  .shot-card .cap { padding: 14px 16px; }
+  .shot-card .cap h3 { margin: 0 0 4px 0; font-size: 15px; }
+  .shot-card .cap p { margin: 0; font-size: 13px; color: var(--muted); }
+
+  .feature-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 20px;
+  }
+  .feature {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px;
+    min-width: 0;
+  }
+  .feature .icon { font-size: 20px; margin-bottom: 8px; }
+  .feature h3 { margin: 0 0 6px 0; font-size: 15px; }
+  .feature p { margin: 0; font-size: 13px; color: var(--muted); }
+
+  .gallery-links { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+  .gallery-link-card { min-width: 0; }
+  .gallery-link-card {
+    display: block; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 22px 22px 20px 22px;
+  }
+  .gallery-link-card:hover { border-color: var(--accent); text-decoration: none; }
+  .gallery-link-card .kicker { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); font-weight: 700; }
+  .gallery-link-card h3 { margin: 8px 0 6px 0; font-size: 17px; color: var(--ink); }
+  .gallery-link-card p { margin: 0; font-size: 13px; color: var(--muted); }
+  .gallery-link-card .arrow { margin-top: 10px; font-size: 13px; font-weight: 600; }
+
+  .steps { counter-reset: step; list-style: none; margin: 0; padding: 0; }
+  .steps li {
+    counter-increment: step; position: relative; padding: 0 0 22px 40px; border-left: 2px solid var(--border);
+    margin-left: 14px;
+  }
+  .steps li:last-child { border-color: transparent; padding-bottom: 0; }
+  .steps li::before {
+    content: counter(step); position: absolute; left: -15px; top: 0; width: 28px; height: 28px;
+    border-radius: 50%; background: var(--accent); color: white; font-size: 13px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .steps pre {
+    background: #111318; color: #e8e8ea; padding: 12px 16px; border-radius: 8px; font-size: 13px;
+    overflow-x: auto; margin: 8px 0 0 0;
+  }
+  .steps p { margin: 2px 0 0 0; font-size: 14px; }
+  .note {
+    background: #fff8e6; border: 1px solid #f0dca0; color: #6b5410; border-radius: 8px;
+    padding: 12px 16px; font-size: 13px; margin-top: 20px;
+  }
+
+  footer { padding: 40px 0 56px 0; text-align: center; color: var(--muted); font-size: 13px; }
+  footer a { color: var(--muted); text-decoration: underline; }
+
+  @media (max-width: 640px) {
+    nav.links { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">TRACE<span>-HEP</span></div>
+    <nav class="links">
+      <a href="#see-it">See it in action</a>
+      <a href="#try-it">Try it yourself</a>
+      <a href="https://github.com/wasikatcern/TRACE-HEP">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap">
+    <h1>See what's inside a collider event.</h1>
+    <p class="tagline">
+      TRACE-HEP is a lightweight, format-agnostic Python toolkit for reconstructed-level
+      collider event and vertex displays -- Delphes, ATLAS/CMS Open Data, PHYSLITE, and
+      calo-timing ntuples, in 2D and interactive 3D, plus a live browser GUI.
+    </p>
+    <div class="cta-row">
+      <a class="btn primary" href="#see-it">See it in action</a>
+      <a class="btn ghost" href="https://github.com/wasikatcern/TRACE-HEP">View on GitHub</a>
+    </div>
+    <div class="install-box"><span class="prompt">$</span> pip install "trace-hep[gui]"</div>
+  </div>
+</section>
+
+<section id="see-it" class="alt">
+  <div class="wrap">
+    <h2>See it in action</h2>
+    <p class="section-sub">
+      Screenshots of <code>trace-gui</code>, the live interactive viewer -- point it at a
+      file (or build an event by hand), pick a display, and it renders in your browser.
+    </p>
+    <div class="shot-grid">
+      <div class="shot-card">
+        <img src="assets/webapp_initial.png" alt="trace-gui landing form" loading="lazy">
+        <div class="cap"><h3>Single event</h3><p>Pick a loader, the Display dropdown updates automatically to that format's valid views.</p></div>
+      </div>
+      <div class="shot-card">
+        <img src="assets/webapp_rendered_2d.png" alt="a rendered ttbar event" loading="lazy">
+        <div class="cap"><h3>Rendered live</h3><p>A real ttbar Delphes event, loaded and drawn on demand -- with a Download-image button.</p></div>
+      </div>
+      <div class="shot-card">
+        <img src="assets/webapp_vertex_display.png" alt="vertex display auto-detection" loading="lazy">
+        <div class="cap"><h3>Vertex display</h3><p>One loader auto-detects calo-timing vs. PHYSLITE vertex ntuples from their branches.</p></div>
+      </div>
+      <div class="shot-card">
+        <img src="assets/webapp_many_mode.png" alt="many events gallery mode" loading="lazy">
+        <div class="cap"><h3>Many events</h3><p>List event numbers ("1, 2, 4-6") and browse them all as a filterable gallery, no categorizing needed.</p></div>
+      </div>
+      <div class="shot-card">
+        <img src="assets/webapp_gallery_mode.png" alt="failure-mode gallery mode" loading="lazy">
+        <div class="cap"><h3>Failure-mode gallery</h3><p>Compare two algorithms' pass/fail lists, or apply custom labels, and review the split visually.</p></div>
+      </div>
+      <div class="shot-card">
+        <img src="assets/webapp_manual_builder.png" alt="build an event by hand" loading="lazy">
+        <div class="cap"><h3>Build an event by hand</h3><p>No file at all -- type jets/leptons/photons/MET directly and render the same displays.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>Live example galleries</h2>
+    <p class="section-sub">
+      These are real, self-contained HTML pages built with <code>tracehep.gallery</code> from
+      real data -- fully interactive right here, no server, no install. Filter by category,
+      click a thumbnail for a full-size lightbox, download one image or all of them.
+    </p>
+    <div class="gallery-links">
+      <a class="gallery-link-card" href="galleries/ttbar_delphes_review.html">
+        <div class="kicker">Failure-mode review</div>
+        <h3>ttbar (Delphes): jet_cut vs. met_cut</h3>
+        <p>40 real ttbar events, split into agree/disagree categories by two toy selections -- exactly the "algorithm 1 vs. algorithm 2" workflow.</p>
+        <div class="arrow">Open the gallery &rarr;</div>
+      </a>
+      <a class="gallery-link-card" href="galleries/calotiming_vertices_review.html">
+        <div class="kicker">Batch review</div>
+        <h3>Real calo-timing ntuple, 12 events</h3>
+        <p>Every reconstructed vertex per event, z-R style, straight from a real 4D-tracking timing ntuple -- no categorization needed.</p>
+        <div class="arrow">Open the gallery &rarr;</div>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <h2>What it can do</h2>
+    <p class="section-sub">A format-agnostic core, plus optional loaders for the ROOT ntuples you actually have.</p>
+    <div class="feature-grid">
+      <div class="feature"><div class="icon">&#128225;</div><h3>Multiple formats</h3><p>Delphes, flat-ntuple, ATLAS &amp; CMS Open Data, PHYSLITE, and calo-timing vertex ntuples -- auto-detected where possible.</p></div>
+      <div class="feature"><div class="icon">&#128200;</div><h3>2D and interactive 3D</h3><p>Polar (&phi;, |&eta;|), beam-axis 2D, and a real WebGL 3D view for every event.</p></div>
+      <div class="feature"><div class="icon">&#128205;</div><h3>Vertex &amp; pileup diagnostics</h3><p>z-R vertex displays, per-vertex track/jet detail, hard-scatter vs. pileup coloring when truth exists.</p></div>
+      <div class="feature"><div class="icon">&#128269;</div><h3>Failure-mode &amp; anomaly review</h3><p>Turn a list of event numbers plus a category into one browsable, filterable HTML gallery.</p></div>
+      <div class="feature"><div class="icon">&#128421;&#65039;</div><h3>Live interactive GUI</h3><p><code>trace-gui</code>: single event, many events, or failure-mode gallery, all in one page.</p></div>
+      <div class="feature"><div class="icon">&#9989;</div><h3>Zero-dependency core</h3><p>The plotting core never requires ROOT or uproot -- loaders pull them in only when you use them.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="try-it">
+  <div class="wrap">
+    <h2>Try it yourself</h2>
+    <p class="section-sub">
+      This page is a static showcase -- GitHub Pages can't run the Python backend
+      <code>trace-gui</code> needs to read a ROOT file. Running it locally takes under a minute:
+    </p>
+    <ol class="steps">
+      <li>
+        <p>Install the package with the GUI extra:</p>
+        <pre>pip install "trace-hep[gui]"</pre>
+      </li>
+      <li>
+        <p>Launch the viewer -- it opens in your browser automatically:</p>
+        <pre>trace-gui</pre>
+      </li>
+      <li>
+        <p>Point it at a file (a path or a public <code>https://</code> URL), or switch to
+           "Build an event by hand" and skip files entirely.</p>
+      </li>
+    </ol>
+    <div class="note">
+      Have a ROOT file you can't share publicly? Everything above runs entirely on your own
+      machine -- nothing is uploaded anywhere.
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    Built by Wasikul Islam &middot;
+    <a href="https://github.com/wasikatcern/TRACE-HEP">Source on GitHub</a> &middot;
+    <a href="https://github.com/wasikatcern/TRACE-HEP/blob/main/docs/TRACE-HEP_Documentation.pdf">Full documentation (PDF)</a> &middot;
+    MIT licensed
+  </div>
+</footer>
+
+</body>
+</html>
