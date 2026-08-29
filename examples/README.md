@@ -44,6 +44,14 @@ results; everything else (categorizing, rendering, browsing) is generic.
 See `tracehep.gallery` for the full API (`build_gallery`,
 `compare_pass_fail`).
 
+## trace-gui
+
+Not a script here -- it's a console command (`pip install "trace-hep[gui]"`
+then run `trace-gui`). Starts a small local web app for interactively
+browsing any event/vertex display, including a "build an event by hand"
+mode with no file at all. See the README's "Live interactive viewer"
+section for the full walkthrough.
+
 ## legacy/
 
 `legacy/event_vertex_display.py` (originally `event_display_tt_R25.py`) is

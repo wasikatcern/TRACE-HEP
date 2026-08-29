@@ -12,7 +12,8 @@ per-vertex / all-vertices displays for pileup diagnostics.
 ```bash
 pip install trace-hep              # core: numpy, matplotlib, plotly only
 pip install trace-hep[delphes]     # + uproot/awkward, for the bundled Delphes/flat-ntuple/calo-timing loaders
-pip install trace-hep[all]         # + kaleido (static image export), mplhep (ATLAS style)
+pip install trace-hep[gui]         # + Flask, for the interactive trace-gui viewer
+pip install trace-hep[all]         # + kaleido (static image export), mplhep (ATLAS style), gui, opendata
 ```
 
 ## Quickstart: build an event by hand
@@ -335,6 +336,31 @@ event count x `dpi`; the default (100) is fine for dozens of events, but
 drop to 60-80 for hundreds-to-thousands to keep the file a reasonable size
 and the browser responsive (measured: ~150 KB/event at dpi=100 for a
 polar view with tracks, ~95 KB/event at dpi=70).
+
+## Live interactive viewer (`trace-gui`)
+
+For "just let me look at one event" -- no script, no pre-rendering --
+`trace-gui` starts a small local web app: type a file path (or URL) and an
+event number, pick a loader and a display, click Render, and it draws live
+in your browser. Covers every loader tracehep ships (Delphes, flat-ntuple,
+calo-timing, ATLAS Open Data, CMS Open Data, ATLAS PHYSLITE) and both 2D
+(matplotlib) and interactive 3D (plotly) displays in one page.
+
+```bash
+pip install "trace-hep[gui]"   # adds Flask -- the only new dependency
+trace-gui                      # opens http://127.0.0.1:5057/ in your browser
+```
+
+It also has a **"Build an event by hand"** loader: skip files entirely and
+add jets/muons/electrons/photons/MET by typing their pT/eta/phi directly,
+then see the same 2D/beam2d/3D displays render live from what you typed --
+useful for teaching, or for quickly checking how a hypothetical topology
+would look.
+
+Every render is shareable as a URL: `?path=...&loader=...&display=...&event_index=...`
+(and `manual_jets=[...]` etc. as JSON for a hand-built event) pre-fills the
+form and renders automatically -- paste a link straight to one event
+instead of re-typing the form.
 
 ## Data model
 

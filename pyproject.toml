@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "trace-hep"
-version = "0.1.12"
+version = "0.1.13"
 description = "TRACE: Toolkit for Rendering and Analysis of Collider Events -- a lightweight library for reconstructed-level collider-event and vertex displays"
 readme = "README.md"
 license = "MIT"
@@ -36,7 +36,8 @@ delphes = ["uproot>=5.0", "awkward>=2.0"]
 kaleido = ["kaleido"]
 style = ["mplhep"]
 opendata = ["atlasopenmagic"]
-all = ["trace-hep[delphes,kaleido,style,opendata]"]
+gui = ["flask>=2.0"]
+all = ["trace-hep[delphes,kaleido,style,opendata,gui]"]
 dev = ["trace-hep[all]", "pytest>=7.0"]
 
 [project.urls]
@@ -45,6 +46,7 @@ Issues = "https://github.com/wasikulislam/trace-hep/issues"
 
 [project.scripts]
 trace-batch = "tracehep.cli:main"
+trace-gui = "tracehep.webapp:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/tracehep"]
