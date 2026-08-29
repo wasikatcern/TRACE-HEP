@@ -23,6 +23,15 @@ data** (`Run2012B_DoubleMuParked`). Run with `pip install "trace-hep[delphes]"`
 first (only uproot is needed; no companion discovery package required for
 CMS, unlike ATLAS Open Data).
 
+## atlas_physlite_demo.py
+
+Streams one event from ATLAS's 2024 research-grade Open Data release
+(DAOD_PHYSLITE) and draws both an all-vertices survey and a hard-scatter
+vertex-detail plot. Read the module docstring in
+`tracehep/io/atlas_physlite.py` first -- PHYSLITE thins away pileup-vertex
+tracks, so only the hard-scatter vertex has real track content here (this
+was verified against real files, not assumed).
+
 ## legacy/
 
 `legacy/event_vertex_display.py` (originally `event_display_tt_R25.py`) is

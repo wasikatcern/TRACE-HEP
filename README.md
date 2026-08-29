@@ -129,6 +129,34 @@ pass `btag_cut` to choose the working point (default: 0.679, the CSVv2
 "medium" working point used in 2012 CMS analyses). Like the ATLAS loader,
 this format has no track- or vertex-level information.
 
+## Quickstart: a real public vertex display (ATLAS PHYSLITE)
+
+`tracehep.io.atlas_physlite` reads ATLAS's 2024 **research** Open Data
+release (DAOD_PHYSLITE format) for genuine track/vertex-level information
+-- verified against real files first: PHYSLITE deliberately thins away
+nearly every track not tied to a reconstructed lepton/jet, so **only the
+hard-scatter vertex keeps a real track collection; every pileup vertex
+comes back with an empty track list** (that's what the file actually
+contains, not a loader bug). Useful for a real single-vertex detail plot;
+not useful for a many-pileup-vertices survey like the private-ntuple
+examples above -- that needs data no public release currently provides
+(see "Status" below).
+
+```python
+import tracehep as trace
+from tracehep.io.atlas_physlite import load_vertex_event
+
+url = "https://opendata.cern.ch/eos/opendata/atlas/rucio/mc20_13TeV/DAOD_PHYSLITE.37620644._000012.pool.root.1"
+vtx_event = load_vertex_event(url, event_index=2, label="ATLAS Open Data (PHYSLITE)")
+
+trace.plot_vertices_zr(vtx_event, style="styled").savefig("vertices.png")  # every vertex's position
+hs_idx = next(i for i, v in enumerate(vtx_event.vertices) if v.is_hs)
+trace.plot_vertex_detail(vtx_event, vtx_index=hs_idx).savefig("hs_vertex_detail.png")  # its real tracks
+```
+
+There's no per-track timing in this release, so `style="time_colored"` has
+nothing to color by -- use `"plain"` or `"styled"`.
+
 ## Vertex displays
 
 ```python
@@ -264,6 +292,17 @@ when an individual object has no truth match of its own.
 Early (v0.1) release. The core API (`plot_event_polar`, `plot_event_beam2d`,
 `plot_event_3d`, `plot_vertices_zr`, `plot_vertices_3d`) is considered
 stable; loaders in `tracehep.io` may gain new formats over time.
+
+A many-pileup-vertices survey display (dozens of vertices, each with its
+own dense, per-track-timed track fan, like the earlier private-ntuple
+examples in this README) currently has no public-open-data equivalent:
+neither ATLAS's nor CMS's public education releases carry track/vertex
+information at all, ATLAS's 2024 PHYSLITE research release thins away
+essentially every pileup-vertex track (verified against real files --
+see `tracehep.io.atlas_physlite`), and CMS's full AOD does have complete
+track/vertex collections but requires the CMSSW software framework to
+read (not just uproot). If that ever changes, a new loader is the way it
+would show up here.
 
 ## Citing
 
