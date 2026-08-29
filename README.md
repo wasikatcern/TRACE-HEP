@@ -7,6 +7,10 @@ event and vertex displays: polar (phi, |eta|) views, beam-axis 2D
 projections, and interactive 3D views, plus a companion family of
 per-vertex / all-vertices displays for pileup diagnostics.
 
+**[See it in action &rarr;](https://wasikatcern.github.io/TRACE-HEP/)** --
+a static showcase with screenshots of `trace-gui` and real, self-contained
+example galleries you can browse right in the page, no install needed.
+
 ## Install
 
 ```bash
