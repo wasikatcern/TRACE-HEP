@@ -9,6 +9,7 @@ venv/
 .DS_Store
 *.png
 *.html
+*.root
 docs/_build_keynote.applescript
 docs/assets/
 docs/TRACE-HEP_Documentation.key

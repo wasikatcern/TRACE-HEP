@@ -64,6 +64,41 @@ trace-batch --input my_sample.root --indices 0 1 2 --outdir out/ --which polar b
     --jet-collection ParticleFlowJet04 --jet-pt-min 30 --show-tracks --track-pt-min 1.0 --track-eta-max 2.5
 ```
 
+## Quickstart: load real public ATLAS Open Data
+
+`tracehep.io.atlas_opendata` reads the public ATLAS Open Data 13 TeV
+"mini-ntuple" format (opendata.atlas.cern) directly -- the same flat schema
+is used for every released dataset (SM, Higgs, SUSY, exotic-resonance
+searches, ...), so this works unchanged across all of them. Find file URLs
+with the companion `atlasopenmagic` package rather than guessing paths by
+hand (`pip install trace-hep[opendata]`):
+
+```python
+import atlasopenmagic as atom
+atom.set_release("2020e-13tev")
+urls = atom.get_urls("410000", skim="2lep", protocol="https")  # ttbar, dilepton skim
+```
+
+```python
+import tracehep as trace
+from tracehep.io.atlas_opendata import load_events
+
+events = load_events("mc_410000.ttbar_lep.2lep.root", indices=[0, 1, 2], label="ttbar (ATLAS Open Data)")
+trace.plot_event_polar(events[0]).savefig("event0_polar.png")
+```
+
+Momenta are stored in MeV in this ntuple; the loader converts to GeV
+automatically. B-tagging is a continuous `jet_MV2c10` discriminant rather
+than a boolean -- pass `btag_cut` to choose the working point (default:
+the 77%-efficiency cut used throughout the ATLAS Open Data tutorials).
+Pass `include_large_r_jets=True` to also draw the large-R jet collection
+(e.g. for a boosted-topology skim like `1largeRjet1lep`) -- note that a
+large-R jet's label will naturally overlap its constituent small-R jets in
+the polar view, since they point in the same direction by construction.
+This ntuple format has no track- or vertex-level information, so it feeds
+`Event`/the event-display functions only, not the vertex/pileup side of
+tracehep.
+
 ## Vertex displays
 
 ```python

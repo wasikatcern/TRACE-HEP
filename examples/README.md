@@ -8,6 +8,13 @@ directory is reserved for small, self-contained examples built directly on
 the `tracehep` public API (see the README quickstart) as the package
 matures.
 
+## atlas_opendata_demo.py
+
+Downloads one small (~14 MB) public ATLAS Open Data file (a Z' -> ttbar
+boosted-resonance sample) via `atlasopenmagic` and draws polar event
+displays for a few events -- the only example here that needs no private
+data at all. Run with `pip install "trace-hep[opendata]"` first.
+
 ## legacy/
 
 `legacy/event_vertex_display.py` (originally `event_display_tt_R25.py`) is
