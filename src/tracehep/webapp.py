@@ -3,15 +3,20 @@ and vertex displays -- point it at a file, type an event number, pick a
 display, and it renders live in your browser. No pre-rendering, no
 scripting: this is the "just let me look at one event" tool.
 
-It also has a **Failure-mode gallery** mode built in, using
-:mod:`tracehep.gallery` under the hood: point it at a file, describe the
-event categories either as two algorithms' pass/fail lists (built into
-the ``both_pass``/``both_fail``/disagreement 4-way split via
-:func:`tracehep.gallery.compare_pass_fail`) or as free-text custom labels
-(for an anomaly-detection bucket, say), and it renders every event on
-demand and shows the resulting browsable, filterable gallery right inside
-the GUI -- no separate script needed, though the full self-contained
-``.html`` can still be saved from there with one click.
+It also has two gallery modes built in, both using :mod:`tracehep.gallery`
+under the hood and rendering every event on demand into a browsable,
+filterable gallery right inside the GUI (with a one-click "Save full
+gallery as .html" for the whole self-contained page) -- no separate
+script needed:
+
+- **Many events**: just a plain list of event numbers, e.g.
+  ``1, 2, 4-6`` -- for "let me look at a batch of events", with no
+  categorization dimension at all.
+- **Failure-mode gallery**: the events come with a category, either two
+  algorithms' pass/fail lists (built into the
+  ``both_pass``/``both_fail``/disagreement 4-way split via
+  :func:`tracehep.gallery.compare_pass_fail`) or free-text custom labels
+  (for an anomaly-detection bucket, say).
 
 Covers every loader tracehep ships: Delphes, flat-ntuple, ATLAS Open Data,
 CMS Open Data, and one unified "Vertex display" loader that auto-detects
@@ -265,6 +270,25 @@ def _parse_id_list(text):
     return [int(tok) for tok in re.split(r"[,\s]+", (text or "").strip()) if tok]
 
 
+def _parse_id_range_list(text):
+    """Like :func:`_parse_id_list`, but each token may also be an inclusive
+    range ``"a-b"`` -- e.g. ``"1, 2, 4-6"`` -> ``[1, 2, 4, 5, 6]``. Used by
+    the "Many events" gallery mode, where there's no pass/fail/label
+    distinction, just a plain list of event numbers to look at."""
+    ids = []
+    for tok in re.split(r"[,\s]+", (text or "").strip()):
+        if not tok:
+            continue
+        if "-" in tok and not tok.startswith("-"):
+            start_str, end_str = tok.split("-", 1)
+            start, end = int(start_str), int(end_str)
+            step = 1 if end >= start else -1
+            ids.extend(range(start, end + step, step))
+        else:
+            ids.append(int(tok))
+    return ids
+
+
 def _parse_custom_categories(text):
     """Parse ``"event_id: label"`` (or ``"event_id, label"``) lines, one per
     event, into a :func:`~tracehep.gallery.build_gallery`-ready dict."""
@@ -292,7 +316,9 @@ def _build_gallery_html(payload):
     from .gallery import build_gallery, compare_pass_fail
 
     category_mode = payload.get("category_mode", "compare")
-    if category_mode == "custom":
+    if category_mode == "list":
+        categories = {eid: "event" for eid in _parse_id_range_list(payload.get("event_list"))}
+    elif category_mode == "custom":
         categories = _parse_custom_categories(payload.get("custom_categories"))
     else:
         name_a = (payload.get("name_a") or "").strip() or "algo1"
@@ -305,8 +331,8 @@ def _build_gallery_html(payload):
 
     if not categories:
         raise ValueError(
-            "No event ids to build a gallery from -- fill in the pass/fail lists "
-            "(or the custom label list) with at least one event id."
+            "No event ids to build a gallery from -- fill in the event list (or the "
+            "pass/fail lists, or the custom label list) with at least one event id."
         )
 
     eids = sorted(categories)
@@ -518,6 +544,7 @@ _PAGE_HTML = """<!doctype html>
   <div class="panel">
     <div class="mode-toggle">
       <button type="button" class="mode-btn active" id="modeSingleBtn" onclick="setMode('single')">Single event</button>
+      <button type="button" class="mode-btn" id="modeManyBtn" onclick="setMode('many')">Many events</button>
       <button type="button" class="mode-btn" id="modeGalleryBtn" onclick="setMode('gallery')">Failure-mode gallery</button>
     </div>
 
@@ -615,6 +642,60 @@ _PAGE_HTML = """<!doctype html>
     </div>
 
     <button id="renderBtn" onclick="renderEvent()">Render</button>
+    </div>
+
+    <div id="manyModePanel" class="hidden">
+      <label for="m_loader">Loader</label>
+      <select id="m_loader">
+        <option value="delphes">Delphes</option>
+        <option value="flat_ntuple">Flat ntuple (run/event)</option>
+        <option value="atlas_opendata">ATLAS Open Data</option>
+        <option value="cms_opendata">CMS Open Data</option>
+        <option value="vertex">Vertex display</option>
+      </select>
+
+      <label for="m_path">File path or URL</label>
+      <input type="text" id="m_path" placeholder="/path/to/sample.root or https://...">
+
+      <label for="m_display">Display</label>
+      <select id="m_display"></select>
+
+      <label for="m_event_list">Event numbers</label>
+      <textarea id="m_event_list" rows="3" placeholder="e.g. 1, 2, 4, 5 or 1-10"></textarea>
+      <div class="field-note">Comma/space/newline-separated; "a-b" expands to an inclusive range.</div>
+
+      <label for="m_run_number">Run # (flat_ntuple only)</label>
+      <input type="number" id="m_run_number" value="0">
+
+      <label for="m_vertex_index">Vertex # (vertex display only)</label>
+      <input type="number" id="m_vertex_index" value="0" min="0">
+
+      <label for="m_tree_name">Tree name (vertex display, optional -- auto-detected)</label>
+      <input type="text" id="m_tree_name" placeholder="auto">
+
+      <label for="m_jet_collection">Jet collection (delphes / vertex detail, optional)</label>
+      <input type="text" id="m_jet_collection" placeholder="default">
+
+      <div class="checkbox-row">
+        <input type="checkbox" id="m_show_tracks">
+        <label for="m_show_tracks" style="margin:0">Show tracks (delphes)</label>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="m_include_large_r">
+        <label for="m_include_large_r" style="margin:0">Include large-R jets (ATLAS Open Data)</label>
+      </div>
+
+      <label for="m_d0">Displaced-track threshold [mm] (delphes, optional)</label>
+      <input type="number" id="m_d0" step="0.1" placeholder="none">
+
+      <label for="m_gallery_title">Gallery title</label>
+      <input type="text" id="m_gallery_title" placeholder="TRACE Event Review">
+
+      <label for="m_gallery_dpi">Image DPI (lower = smaller/faster for many events)</label>
+      <input type="number" id="m_gallery_dpi" value="90" min="40" max="200">
+      <div class="field-note">Up to 300 events per gallery; for more, use tracehep.gallery from a script.</div>
+
+      <button id="manyGalleryBtn" onclick="buildManyGallery()">Build gallery</button>
     </div>
 
     <div id="galleryModePanel" class="hidden">
@@ -802,19 +883,22 @@ populateDisplays();
 
 function setMode(mode) {
   document.getElementById("modeSingleBtn").classList.toggle("active", mode === "single");
+  document.getElementById("modeManyBtn").classList.toggle("active", mode === "many");
   document.getElementById("modeGalleryBtn").classList.toggle("active", mode === "gallery");
   toggle("singleModePanel", mode === "single");
+  toggle("manyModePanel", mode === "many");
   toggle("galleryModePanel", mode === "gallery");
-  document.getElementById("viewer").innerHTML =
-    '<div class="placeholder">' +
-    (mode === "single" ? "Fill in the form and click Render."
-                        : "Describe the event categories and click Build gallery.") +
-    '</div>';
+  var placeholders = {
+    single: "Fill in the form and click Render.",
+    many: "List the event numbers and click Build gallery.",
+    gallery: "Describe the event categories and click Build gallery.",
+  };
+  document.getElementById("viewer").innerHTML = '<div class="placeholder">' + placeholders[mode] + '</div>';
 }
 
-function populateGalleryDisplays() {
-  var loader = document.getElementById("g_loader").value;
-  var sel = document.getElementById("g_display");
+function populateDisplaysInto(selectId, loaderId) {
+  var loader = document.getElementById(loaderId).value;
+  var sel = document.getElementById(selectId);
   sel.innerHTML = "";
   GALLERY_DISPLAYS[loader].forEach(function(pair) {
     var opt = document.createElement("option");
@@ -822,6 +906,9 @@ function populateGalleryDisplays() {
     sel.appendChild(opt);
   });
 }
+
+function populateGalleryDisplays() { populateDisplaysInto("g_display", "g_loader"); }
+function populateManyDisplays() { populateDisplaysInto("m_display", "m_loader"); }
 
 function updateCategoryFields() {
   var mode = document.getElementById("category_mode").value;
@@ -833,6 +920,34 @@ document.getElementById("g_loader").addEventListener("change", populateGalleryDi
 document.getElementById("category_mode").addEventListener("change", updateCategoryFields);
 populateGalleryDisplays();
 updateCategoryFields();
+
+document.getElementById("m_loader").addEventListener("change", populateManyDisplays);
+populateManyDisplays();
+
+// ?mode=many deep-links straight into the Many-events panel; m_* params
+// pre-fill fields, &build=1 auto-builds -- same pattern as the gallery
+// deep-linking below.
+(function applyManyQueryParams() {
+  var params = new URLSearchParams(window.location.search);
+  if (params.get("mode") !== "many") return;
+  setMode("many");
+
+  if (params.has("m_loader")) {
+    document.getElementById("m_loader").value = params.get("m_loader");
+    populateManyDisplays();
+  }
+  if (params.has("m_display")) document.getElementById("m_display").value = params.get("m_display");
+
+  ["m_path", "m_event_list", "m_run_number", "m_vertex_index", "m_tree_name", "m_jet_collection",
+   "m_d0", "m_gallery_title", "m_gallery_dpi"].forEach(function(id) {
+    if (params.has(id)) document.getElementById(id).value = params.get(id);
+  });
+  ["m_show_tracks", "m_include_large_r"].forEach(function(id) {
+    if (params.has(id)) document.getElementById(id).checked = (params.get(id) === "true" || params.get(id) === "1");
+  });
+
+  if (params.get("build") === "1") buildManyGallery();
+})();
 
 // ?mode=gallery deep-links straight into the failure-mode gallery panel;
 // any g_*/category_mode/name_a/a_pass/etc. param pre-fills that field too,
@@ -862,34 +977,11 @@ updateCategoryFields();
   if (params.get("build") === "1") buildGallery();
 })();
 
-function buildGallery() {
-  var btn = document.getElementById("galleryBtn");
+function submitGalleryPayload(payload, btnId) {
+  var btn = document.getElementById(btnId);
   var viewer = document.getElementById("viewer");
   btn.disabled = true;
   viewer.innerHTML = '<div class="spinner"></div>';
-
-  var payload = {
-    loader: document.getElementById("g_loader").value,
-    path: document.getElementById("g_path").value,
-    display: document.getElementById("g_display").value,
-    run_number: document.getElementById("g_run_number").value,
-    vertex_index: document.getElementById("g_vertex_index").value,
-    tree_name: document.getElementById("g_tree_name").value,
-    jet_collection: document.getElementById("g_jet_collection").value,
-    show_tracks: document.getElementById("g_show_tracks").checked,
-    include_large_r_jets: document.getElementById("g_include_large_r").checked,
-    d0_displaced_mm: document.getElementById("g_d0").value,
-    category_mode: document.getElementById("category_mode").value,
-    name_a: document.getElementById("name_a").value,
-    name_b: document.getElementById("name_b").value,
-    a_pass: document.getElementById("a_pass").value,
-    a_fail: document.getElementById("a_fail").value,
-    b_pass: document.getElementById("b_pass").value,
-    b_fail: document.getElementById("b_fail").value,
-    custom_categories: document.getElementById("custom_categories").value,
-    gallery_title: document.getElementById("gallery_title").value,
-    dpi: document.getElementById("gallery_dpi").value,
-  };
 
   fetch("/api/gallery", {
     method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload),
@@ -927,6 +1019,50 @@ function buildGallery() {
       btn.disabled = false;
       viewer.innerHTML = '<div class="error-box">' + escapeHtml(String(err)) + '</div>';
     });
+}
+
+function buildGallery() {
+  submitGalleryPayload({
+    loader: document.getElementById("g_loader").value,
+    path: document.getElementById("g_path").value,
+    display: document.getElementById("g_display").value,
+    run_number: document.getElementById("g_run_number").value,
+    vertex_index: document.getElementById("g_vertex_index").value,
+    tree_name: document.getElementById("g_tree_name").value,
+    jet_collection: document.getElementById("g_jet_collection").value,
+    show_tracks: document.getElementById("g_show_tracks").checked,
+    include_large_r_jets: document.getElementById("g_include_large_r").checked,
+    d0_displaced_mm: document.getElementById("g_d0").value,
+    category_mode: document.getElementById("category_mode").value,
+    name_a: document.getElementById("name_a").value,
+    name_b: document.getElementById("name_b").value,
+    a_pass: document.getElementById("a_pass").value,
+    a_fail: document.getElementById("a_fail").value,
+    b_pass: document.getElementById("b_pass").value,
+    b_fail: document.getElementById("b_fail").value,
+    custom_categories: document.getElementById("custom_categories").value,
+    gallery_title: document.getElementById("gallery_title").value,
+    dpi: document.getElementById("gallery_dpi").value,
+  }, "galleryBtn");
+}
+
+function buildManyGallery() {
+  submitGalleryPayload({
+    loader: document.getElementById("m_loader").value,
+    path: document.getElementById("m_path").value,
+    display: document.getElementById("m_display").value,
+    run_number: document.getElementById("m_run_number").value,
+    vertex_index: document.getElementById("m_vertex_index").value,
+    tree_name: document.getElementById("m_tree_name").value,
+    jet_collection: document.getElementById("m_jet_collection").value,
+    show_tracks: document.getElementById("m_show_tracks").checked,
+    include_large_r_jets: document.getElementById("m_include_large_r").checked,
+    d0_displaced_mm: document.getElementById("m_d0").value,
+    category_mode: "list",
+    event_list: document.getElementById("m_event_list").value,
+    gallery_title: document.getElementById("m_gallery_title").value,
+    dpi: document.getElementById("m_gallery_dpi").value,
+  }, "manyGalleryBtn");
 }
 
 // Deep-linking: ?path=...&loader=...&display=...&event_index=... (+ any other

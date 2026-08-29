@@ -88,3 +88,27 @@ def test_build_gallery_caption_appears_only_for_events_with_one(tmp_path, sample
     html = open(out_path).read()
     assert "a very specific reason" in html
     assert html.count('class="caption"') == 1
+
+
+def test_build_gallery_single_shared_category_has_no_redundant_filter_tab(tmp_path, sample_events):
+    from tracehep.polar import plot_event_polar
+    categories = {0: "event", 1: "event", 2: "event"}
+    out_path = str(tmp_path / "gallery.html")
+    build_gallery(sample_events, categories, plot_fn=plot_event_polar, output_path=out_path)
+    html = open(out_path).read()
+    assert 'onclick="setFilter(\'__all__\', this)"' in html
+    assert "setFilter('event'" not in html
+    assert html.count('class="badge"') == 3
+    assert '>event<' not in html
+
+
+def test_build_gallery_multiple_categories_get_filter_tabs_and_badges(tmp_path, sample_events):
+    from tracehep.polar import plot_event_polar
+    categories = {0: "anomalous", 1: "anomalous", 2: "normal"}
+    out_path = str(tmp_path / "gallery.html")
+    build_gallery(sample_events, categories, plot_fn=plot_event_polar, output_path=out_path)
+    html = open(out_path).read()
+    assert "setFilter('anomalous'" in html
+    assert "setFilter('normal'" in html
+    assert ">anomalous<" in html
+    assert ">normal<" in html

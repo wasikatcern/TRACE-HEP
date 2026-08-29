@@ -169,12 +169,14 @@ def build_gallery(
         caption = _html.escape(captions.get(eid, ""))
         safe_eid = _html.escape(str(eid))
         safe_label = _html.escape(label)
+        badge = (f'<span class="badge" style="background:{color}">{safe_label}</span>'
+                 if len(ordered_labels) > 1 else '<span class="badge" style="visibility:hidden"></span>')
         cards_html.append(f'''
       <div class="card" data-category="{safe_label}" data-eid="{safe_eid.lower()}">
         <img src="{data_uri}" alt="event {safe_eid}" loading="lazy"
              onclick="openLightbox('{safe_eid}')">
         <div class="card-meta">
-          <span class="badge" style="background:{color}">{safe_label}</span>
+          {badge}
           <span class="eid">#{safe_eid}</span>
         </div>
         {f'<div class="caption">{caption}</div>' if caption else ""}
@@ -183,14 +185,17 @@ def build_gallery(
 
     filter_buttons = ['<button class="filter-btn active" onclick="setFilter(\'__all__\', this)">'
                        f'All ({len(shared_ids)})</button>']
-    for label in ordered_labels:
-        n = sum(1 for eid in shared_ids if categories[eid] == label)
-        color = _category_color(label, ordered_labels)
-        safe_label = _html.escape(label)
-        filter_buttons.append(
-            f'<button class="filter-btn" style="--dot:{color}" '
-            f'onclick="setFilter(\'{safe_label}\', this)">{safe_label} ({n})</button>'
-        )
+    if len(ordered_labels) > 1:
+        # a single shared label (e.g. every event just tagged "event" for a
+        # plain, uncategorized review) would only duplicate the All button
+        for label in ordered_labels:
+            n = sum(1 for eid in shared_ids if categories[eid] == label)
+            color = _category_color(label, ordered_labels)
+            safe_label = _html.escape(label)
+            filter_buttons.append(
+                f'<button class="filter-btn" style="--dot:{color}" '
+                f'onclick="setFilter(\'{safe_label}\', this)">{safe_label} ({n})</button>'
+            )
 
     html_doc = _PAGE_TEMPLATE.format(
         title=_html.escape(title),

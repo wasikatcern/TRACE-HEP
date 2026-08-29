@@ -247,6 +247,34 @@ def test_parse_custom_categories_accepts_colon_or_comma():
     assert _parse_custom_categories(text) == {1023: "anomalous", 1044: "anomalous"}
 
 
+def test_parse_id_range_list_expands_ranges_and_singles():
+    from tracehep.webapp import _parse_id_range_list
+
+    assert _parse_id_range_list("1, 2, 4-6") == [1, 2, 4, 5, 6]
+    assert _parse_id_range_list("1-10") == list(range(1, 11))
+    assert _parse_id_range_list("5-3") == [5, 4, 3]
+    assert _parse_id_range_list("") == []
+    assert _parse_id_range_list(None) == []
+
+
+def test_build_gallery_html_list_mode(monkeypatch):
+    from tracehep.models import Event
+    import tracehep.io.delphes as delphes_mod
+
+    monkeypatch.setattr(delphes_mod, "load_event", lambda path, index, **kw: Event(event_number=index))
+
+    from tracehep.webapp import _build_gallery_html
+
+    html = _build_gallery_html({
+        "loader": "delphes", "path": "whatever.root", "display": "polar",
+        "category_mode": "list", "event_list": "1, 2, 4-6",
+        "gallery_title": "Many events review",
+    })
+    assert "Many events review" in html
+    assert html.count("data:image/png;base64,") == 5
+    assert "&middot; 5 events" in html
+
+
 def test_build_gallery_html_compare_mode(monkeypatch):
     from tracehep.models import Event, Jet
     import tracehep.io.delphes as delphes_mod

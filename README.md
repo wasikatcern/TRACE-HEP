@@ -321,10 +321,10 @@ button next to the filter tabs downloads every currently-filtered image
 in one go, for when you've narrowed down to one category and want all of
 it.
 
-Prefer a GUI to a script? `trace-gui`'s **Failure-mode gallery** tab
-builds the exact same kind of gallery interactively (see below) --
-useful for a quick look without writing `load_events`/`compare_pass_fail`
-calls by hand.
+Prefer a GUI to a script? `trace-gui`'s **Many events** and
+**Failure-mode gallery** tabs build the exact same kind of gallery
+interactively (see below) -- useful for a quick look without writing
+`load_events`/`compare_pass_fail` calls by hand.
 
 `compare_pass_fail` builds the four-category split for a 2-algorithm
 comparison; for a single-bucket anomaly-detection review (or any other
@@ -384,19 +384,26 @@ Every render is shareable as a URL: `?path=...&loader=...&display=...&event_inde
 form and renders automatically -- paste a link straight to one event
 instead of re-typing the form.
 
-Switch to the **Failure-mode gallery** tab (`?mode=gallery` deep-links
-straight to it) to build the same browsable review gallery
+Two more tabs build the same kind of browsable review gallery
 `tracehep.gallery` produces (see below), without leaving the browser or
-writing a script: point it at a file, describe the events either as two
-algorithms' pass/fail event-id lists (built into the usual
-`both_pass`/`both_fail`/disagreement 4-way split) or as free-text custom
-labels (`1023: anomalous`, one per line, for an anomaly-detection bucket),
-click **Build gallery**, and it renders every event on demand and shows
-the resulting filterable gallery right there in an embedded frame -- up to
-300 events per request. Every gallery, whether built here or with
-`tracehep.gallery` directly, has a **"Download all (visible)"** button
-next to the filter tabs that downloads every currently-filtered image in
-one click (in addition to each card's individual Download link), and the
+writing a script -- point either one at a file, click **Build gallery**,
+and it renders every event on demand and shows the resulting filterable
+gallery right there in an embedded frame (up to 300 events per request):
+
+- **Many events** (`?mode=many` deep-links to it): just a plain list of
+  event numbers, e.g. `1, 2, 4, 5` or `1-10` (ranges expand inclusively,
+  and mix freely with single ids) -- for "let me look at a batch of
+  events," no categories, no second file needed.
+- **Failure-mode gallery** (`?mode=gallery`): the events come with a
+  category -- describe them either as two algorithms' pass/fail event-id
+  lists (built into the usual `both_pass`/`both_fail`/disagreement 4-way
+  split) or as free-text custom labels (`1023: anomalous`, one per line,
+  for an anomaly-detection bucket).
+
+Every gallery, whether built in either tab or with `tracehep.gallery`
+directly, has a **"Download all (visible)"** button next to the filter
+tabs that downloads every currently-filtered image in one click (in
+addition to each card's individual Download link), and the
 webapp additionally offers **"Save full gallery as .html"** to keep the
 whole self-contained page.
 
