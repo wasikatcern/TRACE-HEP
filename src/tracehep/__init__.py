@@ -22,7 +22,7 @@ from .vertices.view3d import plot_vertices_3d
 from .colors import DEFAULT_COLORS, TRACK_COLOR, DISPLACED_COLOR
 from .filters import filter_event, filter_vertex_event, filter_tracks, filter_jets
 
-__version__ = "0.1.10"
+__version__ = "0.1.11"
 
 __all__ = [
     "__version__",

@@ -133,29 +133,39 @@ this format has no track- or vertex-level information.
 
 `tracehep.io.atlas_physlite` reads ATLAS's 2024 **research** Open Data
 release (DAOD_PHYSLITE format) for genuine track/vertex-level information
--- verified against real files first: PHYSLITE deliberately thins away
-nearly every track not tied to a reconstructed lepton/jet, so **only the
-hard-scatter vertex keeps a real track collection; every pileup vertex
-comes back with an empty track list** (that's what the file actually
-contains, not a loader bug). Useful for a real single-vertex detail plot;
-not useful for a many-pileup-vertices survey like the private-ntuple
-examples above -- that needs data no public release currently provides
-(see "Status" below).
+-- measured against 200 real events first, not assumed: PHYSLITE thins
+away most tracks not tied to a reconstructed lepton/jet, so **199/200
+hard-scatter vertices keep a real track collection, but only ~3.6% of
+pileup vertices retain any tracks at all** (1-12 each; the rest come back
+with a genuinely empty track list, which is what the file contains, not a
+loader bug). This loader doesn't special-case the hard-scatter vertex --
+it decodes whatever's actually valid for every vertex -- so a
+many-vertices survey plot is possible and occasionally shows a pileup
+vertex with real tracks, but it will look sparse compared to the
+private-ntuple examples above, where every vertex keeps its full track
+content (see "Status" below).
 
 ```python
 import tracehep as trace
-from tracehep.io.atlas_physlite import load_vertex_event
+from tracehep.io.atlas_physlite import load_event_jets, load_vertex_event
 
 url = "https://opendata.cern.ch/eos/opendata/atlas/rucio/mc20_13TeV/DAOD_PHYSLITE.37620644._000012.pool.root.1"
 vtx_event = load_vertex_event(url, event_index=2, label="ATLAS Open Data (PHYSLITE)")
 
 trace.plot_vertices_zr(vtx_event, style="styled").savefig("vertices.png")  # every vertex's position
 hs_idx = next(i for i, v in enumerate(vtx_event.vertices) if v.is_hs)
-trace.plot_vertex_detail(vtx_event, vtx_index=hs_idx).savefig("hs_vertex_detail.png")  # its real tracks
+jets = load_event_jets(url, event_index=2)  # this event's calibrated jets, no vertex association
+trace.plot_vertex_detail(vtx_event, vtx_index=hs_idx, jets=jets).savefig("hs_vertex_detail.png")
 ```
 
 There's no per-track timing in this release, so `style="time_colored"` has
-nothing to color by -- use `"plain"` or `"styled"`.
+nothing to color by -- use `"plain"` or `"styled"`. Neither these tracks
+nor these jets carry a truth-level HS/PU classification, so
+`plot_vertex_detail` draws them all in one flat colour each -- "Tracks"
+and "Jet" -- rather than an HS/PU split with no data behind it. Whenever
+none of the objects passed to `plot_vertex_detail` have `is_hs` set, this
+is automatic: it only colours by HS/PU when at least one track (or jet)
+actually has that field populated.
 
 ## Vertex displays
 
@@ -177,7 +187,11 @@ annotation. Tracks and jets are each coloured by their own truth-level
 hard-scatter match (`Track.is_hs` / `Jet.is_hs`) when available, not by the
 owning vertex's overall flag -- a reconstructed "HS" vertex routinely
 contains a genuine mix of truth-HS and truth-PU tracks, and the jets
-matched to it are usually mostly-but-not-entirely truth-HS too:
+matched to it are usually mostly-but-not-entirely truth-HS too. If *none*
+of the tracks (or jets) passed in have `is_hs` set at all -- no truth
+available, as on real detector data -- `plot_vertex_detail` draws them all
+in one flat colour and labels the legend plain "Tracks"/"Jet" rather than
+implying an HS/PU split the data doesn't back up:
 
 ```python
 from tracehep import plot_vertex_detail
@@ -293,16 +307,17 @@ Early (v0.1) release. The core API (`plot_event_polar`, `plot_event_beam2d`,
 `plot_event_3d`, `plot_vertices_zr`, `plot_vertices_3d`) is considered
 stable; loaders in `tracehep.io` may gain new formats over time.
 
-A many-pileup-vertices survey display (dozens of vertices, each with its
-own dense, per-track-timed track fan, like the earlier private-ntuple
-examples in this README) currently has no public-open-data equivalent:
+A many-pileup-vertices survey display as dense as the earlier
+private-ntuple examples in this README (dozens of vertices, each with its
+own full, per-track-timed track fan) has no public-open-data equivalent:
 neither ATLAS's nor CMS's public education releases carry track/vertex
-information at all, ATLAS's 2024 PHYSLITE research release thins away
-essentially every pileup-vertex track (verified against real files --
-see `tracehep.io.atlas_physlite`), and CMS's full AOD does have complete
-track/vertex collections but requires the CMSSW software framework to
-read (not just uproot). If that ever changes, a new loader is the way it
-would show up here.
+information at all, and ATLAS's 2024 PHYSLITE research release thins away
+most pileup-vertex tracks (measured against 200 real events: only ~3.6%
+of pileup vertices retain any -- see `tracehep.io.atlas_physlite`), so a
+PHYSLITE survey plot will look sparse rather than dense. CMS's full AOD
+does have complete track/vertex collections but requires the CMSSW
+software framework to read (not just uproot). If that ever changes, a new
+loader is the way it would show up here.
 
 ## Citing
 

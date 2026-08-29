@@ -15,6 +15,7 @@ import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
 
+from ..colors import DEFAULT_COLORS, TRACK_COLOR
 from ..models import Jet, VertexEvent
 
 __all__ = ["plot_vertices_zr", "plot_vertex_detail"]
@@ -187,6 +188,15 @@ def plot_vertex_detail(
     deliberately left to the caller or a loader-specific helper -- it is
     analysis-specific, unlike everything else this function draws.
 
+    Since every track drawn here belongs to the same one vertex, an
+    HS/PU colour split is only meaningful if at least one track has its
+    own truth-level ``is_hs`` (a real per-track distinction, e.g. some of
+    a reconstructed "HS" vertex's tracks are truth-PU); falling back to
+    the vertex's single is_hs flag for *every* track would just paint
+    them all one colour while claiming a split that isn't there. If no
+    track in this vertex has ``is_hs`` set, every track is drawn in one
+    flat colour and labelled plain "Tracks" instead.
+
     Parameters
     ----------
     vertex_event:
@@ -195,7 +205,11 @@ def plot_vertex_detail(
         Index into ``vertex_event.vertices`` of the vertex to draw.
     jets:
         Jets already associated with this vertex, drawn as cones from its
-        position. Coloured by :class:`~tracehep.models.Jet`.btag.
+        position. Coloured by each jet's own truth-level ``is_hs`` when at
+        least one jet in ``jets`` has it set; if none do (no truth
+        available), every jet is drawn in one flat colour and labelled
+        plain "Jet" rather than implying an HS/PU split with no data
+        behind it.
     zoom_range_mm:
         The x-axis is limited to ``[vtx.z - zoom_range_mm, vtx.z + zoom_range_mm]``.
     title:
@@ -213,12 +227,12 @@ def plot_vertex_detail(
     else:
         fig = ax.figure
 
-    for ti in vtx.track_indices:
-        if ti >= len(vertex_event.tracks):
-            continue
-        track = vertex_event.tracks[ti]
+    drawn_tracks = [vertex_event.tracks[ti] for ti in vtx.track_indices if ti < len(vertex_event.tracks)]
+    tracks_have_truth = any(t.is_hs is not None for t in drawn_tracks)
+
+    for track in drawn_tracks:
         dz, dr = _track_offset(track)
-        color = COLOR_HS if _track_is_hs(track, vtx) else COLOR_PU
+        color = (COLOR_HS if _track_is_hs(track, vtx) else COLOR_PU) if tracks_have_truth else TRACK_COLOR
         ax.plot([vtx.z, vtx.z + dz], [0, dr], color=color, linewidth=1.2)
 
     for eta_ref, ls in [(2.5, "dashed"), (4.0, "dotted")]:
@@ -230,6 +244,9 @@ def plot_vertex_detail(
         ax.text(vtx.z + zoom_range_mm * 0.55, -0.9 - 0.06 * (eta_ref - 2.5), rf"$\eta={eta_ref:g}$",
                 fontsize=10, color="lightgrey")
 
+    jets_have_truth = any(j.is_hs is not None for j in jets)
+    jet_color_neutral = DEFAULT_COLORS["jet"]
+
     jet_labels = []
     for j in jets:
         dz, dr = _schematic_offset(j.pt, j.eta, j.phi, scale=40.0)
@@ -237,11 +254,15 @@ def plot_vertex_detail(
         width = length * 0.3
         norm = max(length, 1e-9)
         perp_x, perp_y = -dr / norm * width / 2, dz / norm * width / 2
-        color = COLOR_HS if j.is_hs else COLOR_PU
+        if jets_have_truth:
+            color = COLOR_HS if j.is_hs else COLOR_PU
+            prefix = "HS " if j.is_hs else "PU "
+        else:
+            color = jet_color_neutral
+            prefix = ""
         ax.fill([vtx.z, vtx.z + dz + perp_x, vtx.z + dz - perp_x],
                 [0, dr + perp_y, dr - perp_y], color=color, alpha=0.5)
-        jet_labels.append((f"{'HS' if j.is_hs else 'PU'} Jet {len(jet_labels) + 1}: "
-                            f"pT={j.pt:.0f} GeV, eta={j.eta:.1f}", color))
+        jet_labels.append((f"{prefix}Jet {len(jet_labels) + 1}: pT={j.pt:.0f} GeV, eta={j.eta:.1f}", color))
 
     x0 = vtx.z - zoom_range_mm
     ax.text(x0 + 0.1, 0.95, f"Reco z = {vtx.z:.1f} mm", fontsize=11, weight="bold")
@@ -252,12 +273,23 @@ def plot_vertex_detail(
     for k, (label, color) in enumerate(jet_labels):
         ax.text(x0 + 0.1, 0.55 - k * 0.12, label, fontsize=10, weight="bold", color=color)
 
-    ax.legend(handles=[
-        plt.Line2D([], [], color=COLOR_HS, label="HS tracks"),
-        plt.Line2D([], [], color=COLOR_PU, label="PU tracks"),
-        plt.Rectangle((0, 0), 1, 1, color=COLOR_HS, alpha=0.5, label="HS jet"),
-        plt.Rectangle((0, 0), 1, 1, color=COLOR_PU, alpha=0.5, label="PU jet"),
-    ], loc="upper right", fontsize=9)
+    legend_handles = []
+    if tracks_have_truth:
+        legend_handles += [
+            plt.Line2D([], [], color=COLOR_HS, label="HS tracks"),
+            plt.Line2D([], [], color=COLOR_PU, label="PU tracks"),
+        ]
+    else:
+        legend_handles.append(plt.Line2D([], [], color=TRACK_COLOR, label="Tracks"))
+    if jets:
+        if jets_have_truth:
+            legend_handles += [
+                plt.Rectangle((0, 0), 1, 1, color=COLOR_HS, alpha=0.5, label="HS jet"),
+                plt.Rectangle((0, 0), 1, 1, color=COLOR_PU, alpha=0.5, label="PU jet"),
+            ]
+        else:
+            legend_handles.append(plt.Rectangle((0, 0), 1, 1, color=jet_color_neutral, alpha=0.5, label="Jet"))
+    ax.legend(handles=legend_handles, loc="upper right", fontsize=9)
 
     ax.axhline(y=0.0, color="black", linestyle="--", linewidth=0.8)
     ax.set_xlabel("Z [mm]")
