@@ -190,24 +190,36 @@
 
 <section>
   <div class="wrap">
-    <h2>Live example galleries</h2>
+    <h2>Live examples</h2>
     <p class="section-sub">
-      These are real, self-contained HTML pages built with <code>tracehep.gallery</code> from
-      real data -- fully interactive right here, no server, no install. Filter by category,
-      click a thumbnail for a full-size lightbox, download one image or all of them.
+      These are real, self-contained HTML pages -- fully interactive right here, no server,
+      no install. The gallery below filters by category and downloads images; the 3D views
+      are genuine WebGL plots you can drag to rotate and scroll to zoom.
     </p>
     <div class="gallery-links">
       <a class="gallery-link-card" href="galleries/ttbar_delphes_review.html">
         <div class="kicker">Failure-mode review</div>
         <h3>ttbar (Delphes): jet_cut vs. met_cut</h3>
-        <p>40 real ttbar events, split into agree/disagree categories by two toy selections -- exactly the "algorithm 1 vs. algorithm 2" workflow.</p>
+        <p>12 real ttbar events, split into agree/disagree categories by two toy selections -- exactly the "algorithm 1 vs. algorithm 2" workflow.</p>
         <div class="arrow">Open the gallery &rarr;</div>
       </a>
-      <a class="gallery-link-card" href="galleries/calotiming_vertices_review.html">
-        <div class="kicker">Batch review</div>
-        <h3>Real calo-timing ntuple, 12 events</h3>
-        <p>Every reconstructed vertex per event, z-R style, straight from a real 4D-tracking timing ntuple -- no categorization needed.</p>
-        <div class="arrow">Open the gallery &rarr;</div>
+      <a class="gallery-link-card" href="galleries/event3d_ttbar.html">
+        <div class="kicker">Interactive 3D</div>
+        <h3>A real ttbar event, in 3D</h3>
+        <p>Jets, a muon, photons, and MET for a real Delphes event -- drag to rotate, scroll to zoom.</p>
+        <div class="arrow">Open the 3D view &rarr;</div>
+      </a>
+      <a class="gallery-link-card" href="galleries/event3d_displaced_tracks.html">
+        <div class="kicker">Interactive 3D</div>
+        <h3>Displaced-track highlighting</h3>
+        <p>Tracks with |d0| above a threshold are colored and labeled separately -- e.g. a long-lived-particle signature.</p>
+        <div class="arrow">Open the 3D view &rarr;</div>
+      </a>
+      <a class="gallery-link-card" href="galleries/event3d_handbuilt.html">
+        <div class="kicker">Interactive 3D</div>
+        <h3>A hand-built event, no file</h3>
+        <p>2 jets, a muon, and MET typed directly into trace-gui's manual builder -- no ROOT file at all.</p>
+        <div class="arrow">Open the 3D view &rarr;</div>
       </a>
     </div>
   </div>
