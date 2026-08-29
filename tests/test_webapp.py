@@ -144,3 +144,33 @@ def test_make_manual_event_no_met_when_pt_blank():
     event = _make_manual_event({})
     assert event.met is None
     assert event.jets == []
+
+
+def test_find_available_port_returns_requested_port_when_free():
+    import socket
+    from tracehep.webapp import _find_available_port
+
+    # bind and release immediately to get a genuinely free ephemeral port
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(("127.0.0.1", 0))
+    free_port = s.getsockname()[1]
+    s.close()
+
+    assert _find_available_port("127.0.0.1", free_port) == free_port
+
+
+def test_find_available_port_skips_busy_port():
+    import socket
+    from tracehep.webapp import _find_available_port
+
+    blocker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    blocker.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    blocker.bind(("127.0.0.1", 0))
+    blocker.listen(1)
+    busy_port = blocker.getsockname()[1]
+    try:
+        found = _find_available_port("127.0.0.1", busy_port)
+        assert found != busy_port
+        assert found > busy_port
+    finally:
+        blocker.close()

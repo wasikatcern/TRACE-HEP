@@ -25,6 +25,7 @@ Developed by Wasikul Islam, PhD.
 import argparse
 import base64
 import io
+import socket
 import threading
 import traceback
 import webbrowser
@@ -195,10 +196,28 @@ def create_app():
     return app
 
 
+def _find_available_port(host: str, start_port: int, max_tries: int = 50) -> int:
+    """Return the first free port at/after ``start_port``. A stopped-but-not-
+    killed previous ``trace-gui`` (e.g. Ctrl+Z instead of Ctrl+C leaves it
+    suspended, still holding the port) is the most common reason the
+    default port is busy -- rather than failing, just move to the next one."""
+    port = start_port
+    for _ in range(max_tries):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                s.bind((host, port))
+                return port
+            except OSError:
+                port += 1
+    raise OSError(f"no free port found in {start_port}-{port} on {host}")
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(prog="trace-gui", description="Launch the interactive TRACE viewer.")
     parser.add_argument("--host", default="127.0.0.1", help="Host to bind (default: 127.0.0.1)")
-    parser.add_argument("--port", type=int, default=5057, help="Port to bind (default: 5057)")
+    parser.add_argument("--port", type=int, default=5057,
+                         help="Port to try first (default: 5057) -- if busy, the next free one is used")
     parser.add_argument("--no-browser", action="store_true", help="Don't auto-open a browser tab")
     args = parser.parse_args(argv)
 
@@ -208,11 +227,22 @@ def main(argv=None) -> int:
         print(f"error: {exc}")
         return 1
 
-    url = f"http://{args.host}:{args.port}/"
+    try:
+        port = _find_available_port(args.host, args.port)
+    except OSError as exc:
+        print(f"error: {exc}")
+        return 1
+    if port != args.port:
+        print(f"Port {args.port} is already in use -- likely a previous trace-gui left running "
+              f"(e.g. stopped with Ctrl+Z instead of Ctrl+C, or a background/tmux/other terminal "
+              f"still has it open). Using port {port} instead. To find and stop the old one: "
+              f"lsof -i :{args.port}  then  kill <PID> (or kill -9 <PID> if it won't stop).")
+
+    url = f"http://{args.host}:{port}/"
     if not args.no_browser:
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
     print(f"TRACE viewer running at {url} (Ctrl+C to stop)")
-    app.run(host=args.host, port=args.port, debug=False)
+    app.run(host=args.host, port=port, debug=False)
     return 0
 
 

@@ -23,7 +23,7 @@ from .colors import DEFAULT_COLORS, TRACK_COLOR, DISPLACED_COLOR
 from .filters import filter_event, filter_vertex_event, filter_tracks, filter_jets
 from .gallery import build_gallery, compare_pass_fail
 
-__version__ = "0.1.13"
+__version__ = "0.1.14"
 
 __all__ = [
     "__version__",

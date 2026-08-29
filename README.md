@@ -362,6 +362,15 @@ Every render is shareable as a URL: `?path=...&loader=...&display=...&event_inde
 form and renders automatically -- paste a link straight to one event
 instead of re-typing the form.
 
+To stop the server, use **Ctrl+C**, not Ctrl+Z -- Ctrl+Z only *suspends*
+it, leaving the port held by a now-invisible process, which is the usual
+cause of a "port already in use" error on the next run. `trace-gui`
+already handles this for you: if its default port (5057) is busy, it
+automatically moves to the next free one and prints which port it picked
+and how to find/stop the stale process (`lsof -i :5057` then `kill <PID>`)
+if you want the original port back. Pass `--port` to pick a different
+starting port yourself.
+
 ## Data model
 
 Every drawing function accepts plain dataclasses from `tracehep.models`:
