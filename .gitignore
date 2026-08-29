@@ -20,3 +20,7 @@ docs/generate_doc_assets.py
 # blanket *.png/*.html ignores above (must come after them to win).
 !docs/site/
 !docs/site/**
+# GitHub Pages serves from /docs itself, so its root needs an index.html
+# (redirects to site/) and a .nojekyll (disables Jekyll for the whole tree).
+!docs/index.html
+!docs/.nojekyll
