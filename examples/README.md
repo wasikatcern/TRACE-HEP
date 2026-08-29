@@ -12,8 +12,16 @@ matures.
 
 Downloads one small (~14 MB) public ATLAS Open Data file (a Z' -> ttbar
 boosted-resonance sample) via `atlasopenmagic` and draws polar event
-displays for a few events -- the only example here that needs no private
-data at all. Run with `pip install "trace-hep[opendata]"` first.
+displays for a few events -- no private data needed. Run with
+`pip install "trace-hep[opendata]"` first.
+
+## cms_opendata_demo.py
+
+Streams (no download -- reads directly over HTTPS) a few events from a
+CMS ttbar MC sample and, separately, from **real 2012 8 TeV LHC collision
+data** (`Run2012B_DoubleMuParked`). Run with `pip install "trace-hep[delphes]"`
+first (only uproot is needed; no companion discovery package required for
+CMS, unlike ATLAS Open Data).
 
 ## legacy/
 

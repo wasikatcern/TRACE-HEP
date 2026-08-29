@@ -99,6 +99,36 @@ This ntuple format has no track- or vertex-level information, so it feeds
 `Event`/the event-display functions only, not the vertex/pileup side of
 tracehep.
 
+## Quickstart: load real public CMS Open Data
+
+`tracehep.io.cms_opendata` reads the public CMS Open Data reduced "NanoAOD
+outreach" format (opendata.cern.ch, `AOD2NanoAODOutreachTool` derivatives)
+-- covering both 2012 (8 TeV) simulated samples (`TTbar`, `SMHiggsToZZTo4L`,
+`ZZTo4mu`, ...) and **real collision data** (`Run2012B_DoubleMuParked`,
+`Run2012B_DoubleElectron`, ...). Different sub-releases carry different
+object collections (some have Jet+Muon+Tau, some have Muon+Electron only);
+the loader detects what's actually present rather than requiring
+per-sample configuration. Momenta are already in GeV (standard NanoAOD
+convention), unlike the ATLAS mini-ntuple's MeV.
+
+These files can be large (tens of MB to tens of GB) -- pass an
+`https://opendata.cern.ch/eos/opendata/...` URL directly as `path` and
+uproot streams only the bytes it needs, without downloading the whole file:
+
+```python
+import tracehep as trace
+from tracehep.io.cms_opendata import load_events
+
+url = "https://opendata.cern.ch/eos/opendata/cms/derived-data/AOD2NanoAODOutreachTool/TTbar.root"
+events = load_events(url, indices=[0, 1, 2], label="ttbar (CMS Open Data)")
+trace.plot_event_polar(events[0]).savefig("event0_polar.png")
+```
+
+B-tagging is a continuous `Jet_btag` discriminant rather than a boolean --
+pass `btag_cut` to choose the working point (default: 0.679, the CSVv2
+"medium" working point used in 2012 CMS analyses). Like the ATLAS loader,
+this format has no track- or vertex-level information.
+
 ## Vertex displays
 
 ```python
