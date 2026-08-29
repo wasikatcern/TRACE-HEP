@@ -316,7 +316,15 @@ Open `review.html` in any browser: filter by category (`clf1_pass_clf2_fail`,
 `clf1_fail_clf2_pass`, `both_pass`, `both_fail`), search/jump to an event
 number, click a thumbnail to page through a full-size lightbox with the
 arrow keys, and click "Download" on any image you want to keep -- nothing
-is written to disk until you click it.
+is written to disk until you click it. A **"Download all (visible)"**
+button next to the filter tabs downloads every currently-filtered image
+in one go, for when you've narrowed down to one category and want all of
+it.
+
+Prefer a GUI to a script? `trace-gui`'s **Failure-mode gallery** tab
+builds the exact same kind of gallery interactively (see below) --
+useful for a quick look without writing `load_events`/`compare_pass_fail`
+calls by hand.
 
 `compare_pass_fail` builds the four-category split for a 2-algorithm
 comparison; for a single-bucket anomaly-detection review (or any other
@@ -342,14 +350,23 @@ polar view with tracks, ~95 KB/event at dpi=70).
 For "just let me look at one event" -- no script, no pre-rendering --
 `trace-gui` starts a small local web app: type a file path (or URL) and an
 event number, pick a loader and a display, click Render, and it draws live
-in your browser. Covers every loader tracehep ships (Delphes, flat-ntuple,
-calo-timing, ATLAS Open Data, CMS Open Data, ATLAS PHYSLITE) and both 2D
-(matplotlib) and interactive 3D (plotly) displays in one page.
+in your browser.
 
 ```bash
 pip install "trace-hep[gui]"   # adds Flask -- the only new dependency
 trace-gui                      # opens http://127.0.0.1:5057/ in your browser
 ```
+
+Loaders: **Delphes**, **flat-ntuple**, **ATLAS Open Data**, **CMS Open
+Data**, and one unified **Vertex display** loader that auto-detects
+whether a file is a calo-timing-style ntuple or a PHYSLITE-style
+derivation by checking for each format's signature branch -- point it at
+`.../CaloTimingNtuple.root`, a `DAOD_PHYSLITE...root` file, or any other
+file carrying one of those two signature branches (even with less
+complete information than either reference format), and it just works
+without you picking a format first. An optional "Tree name" field is
+there for the rare case auto-detection guesses wrong. Every display type
+is covered, both 2D (matplotlib) and interactive 3D (plotly).
 
 It also has a **"Build an event by hand"** loader: skip files entirely and
 add jets/muons/electrons/photons/MET by typing their pT/eta/phi directly,
@@ -357,10 +374,31 @@ then see the same 2D/beam2d/3D displays render live from what you typed --
 useful for teaching, or for quickly checking how a hypothetical topology
 would look.
 
+Every rendered view has a **"Download image"** button: for a 2D display
+it saves the PNG directly; for an interactive 3D display it uses Plotly's
+own capture, so it saves whatever camera angle you've rotated to, not
+just the default view.
+
 Every render is shareable as a URL: `?path=...&loader=...&display=...&event_index=...`
 (and `manual_jets=[...]` etc. as JSON for a hand-built event) pre-fills the
 form and renders automatically -- paste a link straight to one event
 instead of re-typing the form.
+
+Switch to the **Failure-mode gallery** tab (`?mode=gallery` deep-links
+straight to it) to build the same browsable review gallery
+`tracehep.gallery` produces (see below), without leaving the browser or
+writing a script: point it at a file, describe the events either as two
+algorithms' pass/fail event-id lists (built into the usual
+`both_pass`/`both_fail`/disagreement 4-way split) or as free-text custom
+labels (`1023: anomalous`, one per line, for an anomaly-detection bucket),
+click **Build gallery**, and it renders every event on demand and shows
+the resulting filterable gallery right there in an embedded frame -- up to
+300 events per request. Every gallery, whether built here or with
+`tracehep.gallery` directly, has a **"Download all (visible)"** button
+next to the filter tabs that downloads every currently-filtered image in
+one click (in addition to each card's individual Download link), and the
+webapp additionally offers **"Save full gallery as .html"** to keep the
+whole self-contained page.
 
 To stop the server, use **Ctrl+C**, not Ctrl+Z -- Ctrl+Z only *suspends*
 it, leaving the port held by a now-invisible process, which is the usual

@@ -288,6 +288,7 @@ _PAGE_TEMPLATE = """<!doctype html>
   <h1>{title} &middot; {n_events} events</h1>
   <div class="toolbar">
     {filter_buttons}
+    <button class="filter-btn" id="dlAllBtn" onclick="downloadAllVisible()">&#8681; Download all (visible)</button>
     <input id="search" type="text" placeholder="Jump to event #..." oninput="applySearch()">
   </div>
 </header>
@@ -367,6 +368,24 @@ function step(delta) {{
 
 function closeLightbox() {{
   document.getElementById("lightbox").classList.remove("open");
+}}
+
+function downloadAllVisible() {{
+  var cards = visibleCards();
+  if (cards.length === 0) return;
+  if (cards.length > 25 && !confirm("This will download " + cards.length + " separate image files. Continue?")) return;
+  cards.forEach(function(card, i) {{
+    setTimeout(function() {{
+      var img = card.querySelector("img");
+      var dl = card.querySelector(".download");
+      var a = document.createElement("a");
+      a.href = img.src;
+      a.download = dl.dataset.fname;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }}, i * 150);
+  }});
 }}
 
 document.addEventListener("keydown", function(e) {{

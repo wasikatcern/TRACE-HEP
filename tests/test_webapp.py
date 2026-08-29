@@ -174,3 +174,181 @@ def test_find_available_port_skips_busy_port():
         assert found > busy_port
     finally:
         blocker.close()
+
+
+uproot = pytest.importorskip("uproot", reason="tracehep[delphes] (uproot) not installed")
+
+
+def _write_fake_root(tmp_path, tree_name, branch_name):
+    import numpy as np
+    path = str(tmp_path / "fake.root")
+    with uproot.recreate(path) as f:
+        f[tree_name] = {branch_name: np.array([1.0, 2.0, 3.0])}
+    return path
+
+
+def test_detect_vertex_format_recognizes_physlite_signature(tmp_path):
+    from tracehep.webapp import _detect_vertex_format
+
+    path = _write_fake_root(tmp_path, "CollectionTree", "PrimaryVerticesAuxDyn.x")
+    fmt, tree = _detect_vertex_format(path)
+    assert fmt == "physlite"
+    assert tree == "CollectionTree"
+
+
+def test_detect_vertex_format_recognizes_calotiming_signature(tmp_path):
+    from tracehep.webapp import _detect_vertex_format
+
+    path = _write_fake_root(tmp_path, "ntuple", "RecoVtx_z")
+    fmt, tree = _detect_vertex_format(path)
+    assert fmt == "calotiming"
+    assert tree == "ntuple"
+
+
+def test_detect_vertex_format_raises_clear_error_for_unknown_file(tmp_path):
+    from tracehep.webapp import _detect_vertex_format
+
+    path = _write_fake_root(tmp_path, "Events", "Jet_pt")  # a Delphes-ish, non-vertex file
+    with pytest.raises(ValueError, match="Could not find a recognized vertex format"):
+        _detect_vertex_format(path)
+
+
+def test_render_vertex_loader_dispatches_to_calotiming(client, monkeypatch, tmp_path):
+    from tracehep.models import Vertex, VertexEvent
+
+    path = _write_fake_root(tmp_path, "ntuple", "RecoVtx_z")
+
+    def fake_load_vertex_event(p, idx, **kwargs):
+        return VertexEvent(vertices=[Vertex(z=1.0, is_hs=True)], tracks=[])
+
+    import tracehep.io.calotiming as calotiming_mod
+    monkeypatch.setattr(calotiming_mod, "load_vertex_event", fake_load_vertex_event)
+
+    r = client.post("/api/render", json={
+        "loader": "vertex", "display": "vertices_plain", "path": path,
+        "event_index": "0", "vertex_index": "0", "tree_name": "",
+    })
+    assert r.status_code == 200
+    assert r.get_json()["ok"] is True
+
+
+def test_parse_id_list_handles_commas_whitespace_and_newlines():
+    from tracehep.webapp import _parse_id_list
+
+    assert _parse_id_list("12, 45\n88   3") == [12, 45, 88, 3]
+    assert _parse_id_list("") == []
+    assert _parse_id_list(None) == []
+
+
+def test_parse_custom_categories_accepts_colon_or_comma():
+    from tracehep.webapp import _parse_custom_categories
+
+    text = "1023: anomalous\n1044, anomalous\n\nnot-a-line-without-separator"
+    assert _parse_custom_categories(text) == {1023: "anomalous", 1044: "anomalous"}
+
+
+def test_build_gallery_html_compare_mode(monkeypatch):
+    from tracehep.models import Event, Jet
+    import tracehep.io.delphes as delphes_mod
+
+    def fake_load_event(path, index, **kwargs):
+        return Event(jets=[Jet(pt=50 + index, eta=0.1, phi=0.2)], event_number=index)
+
+    monkeypatch.setattr(delphes_mod, "load_event", fake_load_event)
+
+    from tracehep.webapp import _build_gallery_html
+
+    html = _build_gallery_html({
+        "loader": "delphes", "path": "whatever.root", "display": "polar",
+        "category_mode": "compare", "name_a": "clf1", "name_b": "clf2",
+        "a_pass": "1, 2", "a_fail": "3, 4",
+        "b_pass": "1, 4", "b_fail": "2, 3",
+    })
+    assert "TRACE Failure-Mode Review" in html
+    assert html.count("data:image/png;base64,") == 4
+    assert "both_pass" in html
+    assert "both_fail" in html
+    assert "clf1_pass_clf2_fail" in html
+    assert "clf1_fail_clf2_pass" in html
+
+
+def test_build_gallery_html_custom_mode(monkeypatch):
+    from tracehep.models import Event
+    import tracehep.io.delphes as delphes_mod
+
+    monkeypatch.setattr(delphes_mod, "load_event", lambda path, index, **kw: Event(event_number=index))
+
+    from tracehep.webapp import _build_gallery_html
+
+    html = _build_gallery_html({
+        "loader": "delphes", "path": "whatever.root", "display": "beam2d",
+        "category_mode": "custom", "custom_categories": "10: anomalous\n11: anomalous",
+        "gallery_title": "Anomaly review",
+    })
+    assert "Anomaly review" in html
+    assert html.count("data:image/png;base64,") == 2
+    assert "anomalous" in html
+
+
+def test_build_gallery_html_no_events_raises():
+    from tracehep.webapp import _build_gallery_html
+
+    with pytest.raises(ValueError, match="No event ids"):
+        _build_gallery_html({"loader": "delphes", "path": "x.root", "display": "polar",
+                              "category_mode": "custom", "custom_categories": ""})
+
+
+def test_build_gallery_html_too_many_events_raises(monkeypatch):
+    import tracehep.webapp as webapp_mod
+    monkeypatch.setattr(webapp_mod, "_MAX_GALLERY_EVENTS", 2)
+
+    from tracehep.webapp import _build_gallery_html
+
+    with pytest.raises(ValueError, match="safety cap"):
+        _build_gallery_html({"loader": "delphes", "path": "x.root", "display": "polar",
+                              "category_mode": "custom",
+                              "custom_categories": "1: a\n2: a\n3: a"})
+
+
+def test_api_gallery_route_returns_html(client, monkeypatch):
+    from tracehep.models import Event
+    import tracehep.io.delphes as delphes_mod
+
+    monkeypatch.setattr(delphes_mod, "load_event", lambda path, index, **kw: Event(event_number=index))
+
+    r = client.post("/api/gallery", json={
+        "loader": "delphes", "path": "whatever.root", "display": "polar",
+        "category_mode": "custom", "custom_categories": "1: a\n2: b",
+    })
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["ok"] is True
+    assert "<html" in body["html"]
+
+
+def test_api_gallery_route_reports_error_as_400(client):
+    r = client.post("/api/gallery", json={
+        "loader": "delphes", "path": "whatever.root", "display": "polar",
+        "category_mode": "custom", "custom_categories": "",
+    })
+    assert r.status_code == 400
+    assert r.get_json()["ok"] is False
+
+
+def test_render_vertex_loader_dispatches_to_physlite(client, monkeypatch, tmp_path):
+    from tracehep.models import Vertex, VertexEvent
+
+    path = _write_fake_root(tmp_path, "CollectionTree", "PrimaryVerticesAuxDyn.x")
+
+    def fake_load_vertex_event(p, idx, **kwargs):
+        return VertexEvent(vertices=[Vertex(z=1.0, is_hs=True)], tracks=[])
+
+    import tracehep.io.atlas_physlite as physlite_mod
+    monkeypatch.setattr(physlite_mod, "load_vertex_event", fake_load_vertex_event)
+
+    r = client.post("/api/render", json={
+        "loader": "vertex", "display": "vertices_plain", "path": path,
+        "event_index": "0", "vertex_index": "0", "tree_name": "",
+    })
+    assert r.status_code == 200
+    assert r.get_json()["ok"] is True
