@@ -33,7 +33,13 @@ the *current* camera angle, not just a default view.
 
 ``path`` can be a local file or, for the loaders that support it (CMS Open
 Data, ATLAS Open Data, Vertex display), a remote ``https://...`` URL,
-streamed the same way as everywhere else in tracehep.
+streamed the same way as everywhere else in tracehep. Every "File path or
+URL" field also has an "Or upload a .root file" button, for when trace-gui
+is running as a shared server rather than on your own laptop -- a remote
+visitor's browser has no way to hand the server a local path, so it
+uploads the bytes instead (capped at 150 MB, auto-deleted after about an
+hour; see ``deploy/huggingface-space/`` in the repo for one way to host
+it publicly).
 
 Requires the ``gui`` extra: ``pip install trace-hep[gui]`` (adds Flask,
 the only new dependency this introduces -- the core library still never
@@ -50,10 +56,13 @@ import base64
 import io
 import os
 import re
+import shutil
 import socket
 import tempfile
 import threading
+import time
 import traceback
+import uuid
 import webbrowser
 
 import matplotlib
@@ -361,16 +370,83 @@ def _build_gallery_html(payload):
         os.remove(tmp_path)
 
 
+# Uploads (only relevant when trace-gui is running as a shared/public server,
+# e.g. deployed on Hugging Face Spaces, rather than someone's own laptop --
+# a remote visitor's browser has no way to hand the server a local file path,
+# so it uploads the bytes instead). Kept out of the local single-user path
+# entirely: nothing is written under this directory unless someone actually
+# uses the upload widget.
+UPLOAD_ROOT = os.path.join(tempfile.gettempdir(), "tracehep_uploads")
+MAX_UPLOAD_BYTES = 150 * 1024 * 1024  # 150 MB -- generous for a demo, small enough for a free-tier host
+UPLOAD_MAX_AGE_SECONDS = 3600  # uploaded files are not kept around indefinitely
+
+
+def _cleanup_old_uploads(max_age_seconds=UPLOAD_MAX_AGE_SECONDS):
+    """Delete uploaded-file directories older than ``max_age_seconds``. Safe
+    to call often -- most calls will find nothing to do."""
+    if not os.path.isdir(UPLOAD_ROOT):
+        return
+    cutoff = time.time() - max_age_seconds
+    for name in os.listdir(UPLOAD_ROOT):
+        path = os.path.join(UPLOAD_ROOT, name)
+        try:
+            if os.path.getmtime(path) < cutoff:
+                shutil.rmtree(path, ignore_errors=True)
+        except OSError:
+            pass
+
+
+def _start_upload_cleanup_thread(interval_seconds=600):
+    """Periodically sweep stale uploads. Only started by :func:`main` (a real
+    running server) -- never by :func:`create_app` alone, so importing/testing
+    this module doesn't spin up a background thread."""
+    def _loop():
+        while True:
+            _cleanup_old_uploads()
+            time.sleep(interval_seconds)
+    threading.Thread(target=_loop, daemon=True).start()
+
+
 def create_app():
     """Build and return the Flask app (not started -- see :func:`main`)."""
     _require_flask()
     from flask import Flask, jsonify, request
+    from werkzeug.utils import secure_filename
 
     app = Flask(__name__)
+    app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES + 1_000_000  # + slack for form overhead
+
+    @app.errorhandler(413)
+    def _too_large(exc):  # noqa: ARG001 -- Flask passes the exception in
+        return jsonify({"ok": False, "error": f"file too large (over {MAX_UPLOAD_BYTES / 1e6:.0f} MB limit)"}), 413
 
     @app.route("/")
     def index():
         return _PAGE_HTML
+
+    @app.route("/api/upload", methods=["POST"])
+    def upload():
+        _cleanup_old_uploads()
+        f = request.files.get("file")
+        if f is None or f.filename == "":
+            return jsonify({"ok": False, "error": "no file provided"}), 400
+        filename = secure_filename(f.filename) or "upload.root"
+        if not filename.lower().endswith(".root"):
+            return jsonify({"ok": False, "error": "only .root files are accepted"}), 400
+
+        os.makedirs(UPLOAD_ROOT, exist_ok=True)
+        dest_dir = os.path.join(UPLOAD_ROOT, uuid.uuid4().hex)
+        os.makedirs(dest_dir)
+        dest_path = os.path.join(dest_dir, filename)
+        f.save(dest_path)
+
+        size = os.path.getsize(dest_path)
+        if size > MAX_UPLOAD_BYTES:
+            shutil.rmtree(dest_dir, ignore_errors=True)
+            return jsonify({"ok": False, "error": f"file too large ({size / 1e6:.0f} MB > "
+                                                    f"{MAX_UPLOAD_BYTES / 1e6:.0f} MB limit)"}), 400
+
+        return jsonify({"ok": True, "path": dest_path, "filename": filename, "size_mb": round(size / 1e6, 1)})
 
     @app.route("/api/render", methods=["POST"])
     def render():
@@ -433,6 +509,8 @@ def main(argv=None) -> int:
               f"still has it open). Using port {port} instead. To find and stop the old one: "
               f"lsof -i :{args.port}  then  kill <PID> (or kill -9 <PID> if it won't stop).")
 
+    _start_upload_cleanup_thread()
+
     url = f"http://{args.host}:{port}/"
     if not args.no_browser:
         threading.Timer(1.0, lambda: webbrowser.open(url)).start()
@@ -481,6 +559,15 @@ _PAGE_HTML = """<!doctype html>
   }
   .mode-btn.active { background: var(--ink); color: white; border-color: var(--ink); }
   .field-note { font-size: 10px; color: var(--muted); margin-top: -3px; }
+  .upload-row { margin-top: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .upload-input { display: none; }
+  .upload-btn {
+    display: inline-block; padding: 5px 10px; border: 1px dashed var(--border); border-radius: 6px;
+    font-size: 11px; color: var(--accent); cursor: pointer; background: var(--bg); font-weight: 600;
+  }
+  .upload-btn:hover { background: var(--surface); }
+  .upload-status { font-size: 11px; color: var(--muted); }
+  .upload-status.error { color: var(--error); }
   .gallery-frame {
     width: 100%; height: calc(100vh - 150px); border: none; border-radius: 8px;
     background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.08);
@@ -562,6 +649,11 @@ _PAGE_HTML = """<!doctype html>
     <div id="row_path">
       <label for="path">File path or URL</label>
       <input type="text" id="path" placeholder="/path/to/sample.root or https://...">
+      <div class="upload-row">
+        <label for="path_file" class="upload-btn">Or upload a .root file</label>
+        <input type="file" id="path_file" class="upload-input" accept=".root">
+        <span class="upload-status" id="path_file_status"></span>
+      </div>
     </div>
 
     <label for="display">Display</label>
@@ -656,6 +748,11 @@ _PAGE_HTML = """<!doctype html>
 
       <label for="m_path">File path or URL</label>
       <input type="text" id="m_path" placeholder="/path/to/sample.root or https://...">
+      <div class="upload-row">
+        <label for="m_path_file" class="upload-btn">Or upload a .root file</label>
+        <input type="file" id="m_path_file" class="upload-input" accept=".root">
+        <span class="upload-status" id="m_path_file_status"></span>
+      </div>
 
       <label for="m_display">Display</label>
       <select id="m_display"></select>
@@ -710,6 +807,11 @@ _PAGE_HTML = """<!doctype html>
 
       <label for="g_path">File path or URL</label>
       <input type="text" id="g_path" placeholder="/path/to/sample.root or https://...">
+      <div class="upload-row">
+        <label for="g_path_file" class="upload-btn">Or upload a .root file</label>
+        <input type="file" id="g_path_file" class="upload-input" accept=".root">
+        <span class="upload-status" id="g_path_file_status"></span>
+      </div>
 
       <label for="g_display">Display</label>
       <select id="g_display"></select>
@@ -1200,6 +1302,46 @@ function escapeHtml(s) {
   d.textContent = s;
   return d.innerHTML;
 }
+
+// Lets a browser hand the server a file's bytes instead of a local path --
+// needed when trace-gui is running on a shared/public server rather than
+// someone's own laptop, where a local path means nothing to the server.
+// On success, the returned server-side path is written into the sibling
+// "File path or URL" field, so everything downstream (render/gallery) needs
+// no changes at all.
+function wireFileUpload(fileInputId, pathInputId, statusId) {
+  var fileInput = document.getElementById(fileInputId);
+  if (!fileInput) return;
+  fileInput.addEventListener("change", function(e) {
+    var file = e.target.files[0];
+    var statusEl = document.getElementById(statusId);
+    if (!file) return;
+    statusEl.className = "upload-status";
+    statusEl.textContent = "Uploading " + file.name + " (" + (file.size / 1e6).toFixed(1) + " MB)...";
+
+    var fd = new FormData();
+    fd.append("file", file);
+    fetch("/api/upload", {method: "POST", body: fd})
+      .then(function(r) { return r.json().then(function(body) { return {status: r.status, body: body}; }); })
+      .then(function(res) {
+        if (!res.body.ok) {
+          statusEl.className = "upload-status error";
+          statusEl.textContent = "Upload failed: " + (res.body.error || "unknown error");
+          return;
+        }
+        document.getElementById(pathInputId).value = res.body.path;
+        statusEl.className = "upload-status";
+        statusEl.textContent = "Uploaded " + res.body.filename + " (" + res.body.size_mb + " MB)";
+      })
+      .catch(function(err) {
+        statusEl.className = "upload-status error";
+        statusEl.textContent = "Upload failed: " + String(err);
+      });
+  });
+}
+wireFileUpload("path_file", "path", "path_file_status");
+wireFileUpload("m_path_file", "m_path", "m_path_file_status");
+wireFileUpload("g_path_file", "g_path", "g_path_file_status");
 </script>
 </body>
 </html>

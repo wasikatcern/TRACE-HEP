@@ -388,6 +388,16 @@ Every render is shareable as a URL: `?path=...&loader=...&display=...&event_inde
 form and renders automatically -- paste a link straight to one event
 instead of re-typing the form.
 
+Every "File path or URL" field also has an **"Or upload a .root file"**
+button, for when `trace-gui` is running as a shared server rather than on
+your own laptop -- a visitor's browser can't hand the server a local path,
+so it uploads the file's bytes instead (capped at 150 MB, and the server
+auto-deletes uploads after about an hour). Want to let colleagues try
+their own files without anyone installing anything? See
+[`deploy/huggingface-space/`](deploy/huggingface-space/) for a ready-made
+Docker setup for Hugging Face Spaces' free tier -- push it, and you have a
+public URL.
+
 Two more tabs build the same kind of browsable review gallery
 `tracehep.gallery` produces (see below), without leaving the browser or
 writing a script -- point either one at a file, click **Build gallery**,

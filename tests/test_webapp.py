@@ -1,3 +1,6 @@
+import os
+import time
+
 import pytest
 
 flask = pytest.importorskip("flask", reason="tracehep[gui] (flask) not installed")
@@ -377,6 +380,95 @@ def test_render_vertex_loader_dispatches_to_physlite(client, monkeypatch, tmp_pa
     r = client.post("/api/render", json={
         "loader": "vertex", "display": "vertices_plain", "path": path,
         "event_index": "0", "vertex_index": "0", "tree_name": "",
+    })
+    assert r.status_code == 200
+    assert r.get_json()["ok"] is True
+
+
+def test_upload_rejects_missing_file(client):
+    r = client.post("/api/upload", data={}, content_type="multipart/form-data")
+    assert r.status_code == 400
+    assert "no file provided" in r.get_json()["error"]
+
+
+def test_upload_rejects_non_root_extension(client):
+    import io as io_mod
+    r = client.post("/api/upload", data={
+        "file": (io_mod.BytesIO(b"not a root file"), "notes.txt"),
+    }, content_type="multipart/form-data")
+    assert r.status_code == 400
+    assert "only .root files" in r.get_json()["error"]
+
+
+def test_upload_saves_file_and_returns_usable_path(client, monkeypatch, tmp_path):
+    import io as io_mod
+    import tracehep.webapp as webapp_mod
+    monkeypatch.setattr(webapp_mod, "UPLOAD_ROOT", str(tmp_path / "uploads"))
+
+    r = client.post("/api/upload", data={
+        "file": (io_mod.BytesIO(b"pretend-root-bytes"), "my sample.root"),
+    }, content_type="multipart/form-data")
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["ok"] is True
+    assert os.path.isfile(body["path"])
+    assert body["path"].startswith(str(tmp_path / "uploads"))
+    assert body["filename"] == "my_sample.root"
+
+
+def test_upload_rejects_file_over_size_limit(client, monkeypatch, tmp_path):
+    import io as io_mod
+    import tracehep.webapp as webapp_mod
+    monkeypatch.setattr(webapp_mod, "UPLOAD_ROOT", str(tmp_path / "uploads"))
+    monkeypatch.setattr(webapp_mod, "MAX_UPLOAD_BYTES", 10)
+
+    r = client.post("/api/upload", data={
+        "file": (io_mod.BytesIO(b"this is more than ten bytes"), "big.root"),
+    }, content_type="multipart/form-data")
+    assert r.status_code == 400
+    assert "too large" in r.get_json()["error"]
+
+
+def test_cleanup_old_uploads_removes_only_stale_dirs(tmp_path, monkeypatch):
+    import tracehep.webapp as webapp_mod
+    upload_root = tmp_path / "uploads"
+    old_dir = upload_root / "old"
+    fresh_dir = upload_root / "fresh"
+    old_dir.mkdir(parents=True)
+    fresh_dir.mkdir(parents=True)
+    (old_dir / "f.root").write_bytes(b"x")
+    (fresh_dir / "f.root").write_bytes(b"x")
+
+    old_time = time.time() - 10_000
+    os.utime(old_dir, (old_time, old_time))
+
+    monkeypatch.setattr(webapp_mod, "UPLOAD_ROOT", str(upload_root))
+    webapp_mod._cleanup_old_uploads(max_age_seconds=3600)
+
+    assert not old_dir.exists()
+    assert fresh_dir.exists()
+
+
+def test_render_accepts_a_path_returned_by_upload(client, monkeypatch, tmp_path):
+    import io as io_mod
+    import tracehep.webapp as webapp_mod
+    from tracehep.models import Event
+
+    monkeypatch.setattr(webapp_mod, "UPLOAD_ROOT", str(tmp_path / "uploads"))
+    upload_resp = client.post("/api/upload", data={
+        "file": (io_mod.BytesIO(b"pretend-root-bytes"), "sample.root"),
+    }, content_type="multipart/form-data")
+    uploaded_path = upload_resp.get_json()["path"]
+
+    def fake_load_event(path, index, **kwargs):
+        assert path == uploaded_path
+        return Event(event_number=index)
+
+    import tracehep.io.delphes as delphes_mod
+    monkeypatch.setattr(delphes_mod, "load_event", fake_load_event)
+
+    r = client.post("/api/render", json={
+        "loader": "delphes", "path": uploaded_path, "display": "polar", "event_index": "0",
     })
     assert r.status_code == 200
     assert r.get_json()["ok"] is True
