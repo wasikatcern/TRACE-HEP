@@ -411,8 +411,11 @@ gallery right there in an embedded frame (up to 300 events per request):
 - **Failure-mode gallery** (`?mode=gallery`): the events come with a
   category -- describe them either as two algorithms' pass/fail event-id
   lists (built into the usual `both_pass`/`both_fail`/disagreement 4-way
-  split) or as free-text custom labels (`1023: anomalous`, one per line,
-  for an anomaly-detection bucket).
+  split), as free-text custom labels (`1023: anomalous`, one per line, for
+  an anomaly-detection bucket), or **auto-flag by Δφ(MET, closest jet)**:
+  give it an event range (`1-200`) and a threshold, and it loads every
+  event itself, computes the angle, and sorts them into
+  flagged/not-flagged -- no pass/fail list to build by hand.
 
 Every gallery, whether built in either tab or with `tracehep.gallery`
 directly, has a **"Download all (visible)"** button next to the filter

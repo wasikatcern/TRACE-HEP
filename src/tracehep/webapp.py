@@ -12,11 +12,17 @@ script needed:
 - **Many events**: just a plain list of event numbers, e.g.
   ``1, 2, 4-6`` -- for "let me look at a batch of events", with no
   categorization dimension at all.
-- **Failure-mode gallery**: the events come with a category, either two
+- **Failure-mode gallery**: the events come with a category -- two
   algorithms' pass/fail lists (built into the
   ``both_pass``/``both_fail``/disagreement 4-way split via
-  :func:`tracehep.gallery.compare_pass_fail`) or free-text custom labels
-  (for an anomaly-detection bucket, say).
+  :func:`tracehep.gallery.compare_pass_fail`), free-text custom labels
+  (for an anomaly-detection bucket, say), or **auto-flag**: give it an
+  event range (e.g. ``1-200``) and a threshold, and it loads every event
+  in the range, computes Delta-phi(MET, closest jet) itself, and sorts
+  events into "flagged"/"not flagged" with no pass/fail list to prepare
+  by hand -- the same off-axis-MET diagnostic developed in the
+  accompanying paper's debugging case study, now a real, scriptless GUI
+  feature rather than a one-off analysis script.
 
 Covers every loader tracehep ships: Delphes, flat-ntuple, ATLAS Open Data,
 CMS Open Data, and one unified "Vertex display" loader that auto-detects
@@ -54,6 +60,7 @@ Developed by Wasikul Islam, PhD.
 import argparse
 import base64
 import io
+import math
 import os
 import re
 import shutil
@@ -196,21 +203,18 @@ def _require_uproot_for_detection():
     return uproot
 
 
-def _load_figure(payload):
-    """Load whatever ``payload['loader']`` points at and render the requested
-    ``payload['display']``, returning the raw matplotlib/plotly figure.
-    Shared by the single-event viewer (:func:`_dispatch`) and the
-    failure-mode gallery builder (:func:`_build_gallery_html`), which calls
-    this once per event id."""
+def _load_object(payload):
+    """Load whatever ``payload['loader']``/``payload['path']`` points at,
+    without drawing it. Returns ``("event", event)`` or
+    ``("vertex", (vertex_event, vertex_index, jets))``. Factored out of
+    :func:`_load_figure` so a caller can inspect physics quantities on the
+    loaded object -- e.g. Δφ(MET, closest jet) for auto-flagging -- before
+    deciding whether/how to draw it, without loading the same event twice."""
     loader = payload["loader"]
-    display = payload["display"]
-    show_tracks = bool(payload.get("show_tracks"))
-    d0_displaced_mm = float(payload["d0_displaced_mm"]) if payload.get("d0_displaced_mm") else None
     jet_collection = (payload.get("jet_collection") or "").strip() or None
 
     if loader == "manual":
-        event = _make_manual_event(payload)
-        return _make_event_fig(event, display, show_tracks=False, d0_displaced_mm=None)
+        return "event", _make_manual_event(payload)
 
     path = payload["path"]
     event_index = int(payload["event_index"])
@@ -220,27 +224,26 @@ def _load_figure(payload):
         kwargs = {"with_tracks": True}
         if jet_collection:
             kwargs["jet_collection"] = jet_collection
-        event = load_event(path, event_index, **kwargs)
-        return _make_event_fig(event, display, show_tracks=show_tracks, d0_displaced_mm=d0_displaced_mm)
+        return "event", load_event(path, event_index, **kwargs)
 
     if loader == "flat_ntuple":
         from .io.flat_ntuple import load_event_by_run_event
         run_number = int(payload["run_number"])
-        event = load_event_by_run_event(path, run_number, event_index)
-        return _make_event_fig(event, display, show_tracks=False, d0_displaced_mm=None)
+        return "event", load_event_by_run_event(path, run_number, event_index)
 
     if loader == "atlas_opendata":
         from .io.atlas_opendata import load_events
         event = load_events(path, [event_index],
                              include_large_r_jets=bool(payload.get("include_large_r_jets")))[event_index]
-        return _make_event_fig(event, display, show_tracks=False, d0_displaced_mm=None)
+        return "event", event
 
     if loader == "cms_opendata":
         from .io.cms_opendata import load_events
         event = load_events(path, [event_index])[event_index]
-        return _make_event_fig(event, display, show_tracks=False, d0_displaced_mm=None)
+        return "event", event
 
     if loader == "vertex":
+        display = payload.get("display")
         tree_name_hint = (payload.get("tree_name") or "").strip() or None
         fmt, detected_tree = _detect_vertex_format(path, tree_name_hint)
         vertex_index = int(payload.get("vertex_index") or 0)
@@ -261,13 +264,55 @@ def _load_figure(payload):
                 jets = match_jets_to_vertex(path, event_index, vertex_event.vertices[vertex_index].z,
                                              tree_name=detected_tree, **kwargs)
 
-        return _make_vertex_fig(vertex_event, display, vertex_index=vertex_index, jets=jets)
+        return "vertex", (vertex_event, vertex_index, jets)
 
     raise ValueError(f"unknown loader {loader!r}")
 
 
+def _event_display_kwargs(payload):
+    """``show_tracks``/``d0_displaced_mm`` only apply to the Delphes loader
+    (the only one that carries a Track collection); every other event-level
+    loader ignores them, matching the single-event viewer's behavior."""
+    if payload.get("loader") == "delphes":
+        show_tracks = bool(payload.get("show_tracks"))
+        d0_displaced_mm = float(payload["d0_displaced_mm"]) if payload.get("d0_displaced_mm") else None
+        return show_tracks, d0_displaced_mm
+    return False, None
+
+
+def _load_figure(payload):
+    """Load whatever ``payload['loader']`` points at and render the requested
+    ``payload['display']``, returning the raw matplotlib/plotly figure.
+    Shared by the single-event viewer (:func:`_dispatch`) and the
+    gallery builder (:func:`_build_gallery_html`), which calls this once
+    per event id."""
+    display = payload["display"]
+    kind, obj = _load_object(payload)
+    if kind == "event":
+        show_tracks, d0_displaced_mm = _event_display_kwargs(payload)
+        return _make_event_fig(obj, display, show_tracks=show_tracks, d0_displaced_mm=d0_displaced_mm)
+    vertex_event, vertex_index, jets = obj
+    return _make_vertex_fig(vertex_event, display, vertex_index=vertex_index, jets=jets)
+
+
 def _dispatch(payload):
     return _fig_response(_load_figure(payload))
+
+
+def _dphi(phi1, phi2):
+    """Smallest absolute angular separation between two phi values, in [0, pi]."""
+    d = abs(phi1 - phi2) % (2 * math.pi)
+    return min(d, 2 * math.pi - d)
+
+
+def _min_dphi_met_jet(event):
+    """Smallest |Δφ(MET, jet)| over every jet in the event, or ``None`` if
+    the event has no MET or no jets -- auto-flagging needs both, the same
+    diagnostic used throughout the accompanying paper's debugging case
+    study."""
+    if event.met is None or not event.jets:
+        return None
+    return min(_dphi(event.met.phi, j.phi) for j in event.jets)
 
 
 _MAX_GALLERY_EVENTS = 300
@@ -318,17 +363,75 @@ def _parse_custom_categories(text):
 
 def _build_gallery_html(payload):
     """Build a failure-mode/anomaly-review gallery (see
-    :mod:`tracehep.gallery`) from a webapp form payload: load every event the
-    category lists mention with :func:`_load_figure`, then hand the already-
-    rendered figures to :func:`tracehep.gallery.build_gallery`. Returns the
-    self-contained gallery HTML as a string."""
+    :mod:`tracehep.gallery`) from a webapp form payload. Returns the
+    self-contained gallery HTML as a string.
+
+    Every ``category_mode`` except ``"auto_flag"`` decides each event's
+    category from the form input alone, then loads/draws the events
+    (:func:`_load_figure`) in a second pass. ``"auto_flag"`` is different --
+    the category (flagged/not flagged) depends on a physics quantity
+    computed from the loaded event itself (Δφ(MET, closest jet), the same
+    diagnostic developed in the accompanying paper's debugging case study),
+    so loading and categorizing happen together, one event at a time, so
+    each event is only fetched once."""
     from .gallery import build_gallery, compare_pass_fail
 
     category_mode = payload.get("category_mode", "compare")
-    if category_mode == "list":
+    captions = None
+
+    if category_mode == "auto_flag":
+        if payload.get("loader") == "vertex":
+            raise ValueError(
+                "Auto-flagging by Δφ(MET, closest jet) needs an event-level loader "
+                "(Delphes, flat-ntuple, ATLAS/CMS Open Data, or a hand-built event) -- the "
+                "Vertex display loader has no jets or MET to compute it from."
+            )
+        threshold = float(payload.get("flag_threshold") or 0.5)
+        event_ids = _parse_id_range_list(payload.get("event_list"))
+        if not event_ids:
+            raise ValueError(
+                "No event ids to scan -- fill in the event range (e.g. \"1-200\")."
+            )
+        if len(event_ids) > _MAX_GALLERY_EVENTS:
+            raise ValueError(
+                f"{len(event_ids)} events requested, above the {_MAX_GALLERY_EVENTS}-event safety "
+                f"cap for the live viewer (each is loaded and scanned on demand in this one "
+                f"request). Narrow the range, or use tracehep directly from a script for larger scans."
+            )
+
+        events, categories, captions = {}, {}, {}
+        skipped = 0
+        for eid in event_ids:
+            per_event_payload = dict(payload)
+            per_event_payload["event_index"] = eid
+            kind, obj = _load_object(per_event_payload)
+            if kind != "event":
+                raise ValueError("auto-flagging requires an event-level loader")
+            dphi = _min_dphi_met_jet(obj)
+            if dphi is None:
+                skipped += 1
+                continue
+            show_tracks, d0_displaced_mm = _event_display_kwargs(per_event_payload)
+            events[eid] = _make_event_fig(obj, payload["display"], show_tracks=show_tracks,
+                                           d0_displaced_mm=d0_displaced_mm)
+            categories[eid] = (f"flagged (Δφ>{threshold:g} rad)" if dphi > threshold
+                                else "not flagged")
+            captions[eid] = f"Δφ(MET, closest jet) = {dphi:.3f} rad"
+
+        if not categories:
+            raise ValueError(
+                f"None of the {len(event_ids)} scanned event(s) had both MET and at least one "
+                f"jet, so Δφ(MET, closest jet) couldn't be computed for any of them."
+            )
+        n_flagged = sum(1 for c in categories.values() if c.startswith("flagged"))
+        default_title = (f"Auto-flagged review ({n_flagged}/{len(categories)} events flagged"
+                          f"{f', {skipped} skipped (no MET/jets)' if skipped else ''})")
+    elif category_mode == "list":
         categories = {eid: "event" for eid in _parse_id_range_list(payload.get("event_list"))}
+        default_title = "TRACE Failure-Mode Review"
     elif category_mode == "custom":
         categories = _parse_custom_categories(payload.get("custom_categories"))
+        default_title = "TRACE Failure-Mode Review"
     else:
         name_a = (payload.get("name_a") or "").strip() or "algo1"
         name_b = (payload.get("name_b") or "").strip() or "algo2"
@@ -337,6 +440,7 @@ def _build_gallery_html(payload):
         results_b = {eid: True for eid in _parse_id_list(payload.get("b_pass"))}
         results_b.update({eid: False for eid in _parse_id_list(payload.get("b_fail"))})
         categories = compare_pass_fail(results_a, results_b, name_a=name_a, name_b=name_b)
+        default_title = "TRACE Failure-Mode Review"
 
     if not categories:
         raise ValueError(
@@ -344,26 +448,28 @@ def _build_gallery_html(payload):
             "pass/fail lists, or the custom label list) with at least one event id."
         )
 
-    eids = sorted(categories)
-    if len(eids) > _MAX_GALLERY_EVENTS:
-        raise ValueError(
-            f"{len(eids)} events requested, above the {_MAX_GALLERY_EVENTS}-event safety cap for "
-            f"the live viewer (each is rendered on demand in this one request). Narrow the event "
-            f"list, or call tracehep.gallery.build_gallery directly from a script for larger batches."
-        )
+    if category_mode != "auto_flag":
+        eids = sorted(categories)
+        if len(eids) > _MAX_GALLERY_EVENTS:
+            raise ValueError(
+                f"{len(eids)} events requested, above the {_MAX_GALLERY_EVENTS}-event safety cap for "
+                f"the live viewer (each is rendered on demand in this one request). Narrow the event "
+                f"list, or call tracehep.gallery.build_gallery directly from a script for larger batches."
+            )
 
-    events = {}
-    for eid in eids:
-        per_event_payload = dict(payload)
-        per_event_payload["event_index"] = eid
-        events[eid] = _load_figure(per_event_payload)
+        events = {}
+        for eid in eids:
+            per_event_payload = dict(payload)
+            per_event_payload["event_index"] = eid
+            events[eid] = _load_figure(per_event_payload)
 
-    title = (payload.get("gallery_title") or "").strip() or "TRACE Failure-Mode Review"
+    title = (payload.get("gallery_title") or "").strip() or default_title
     dpi = int(payload.get("dpi") or 90)
 
     tmp_path = tempfile.NamedTemporaryFile(suffix=".html", delete=False).name
     try:
-        build_gallery(events, categories, lambda fig: fig, tmp_path, title=title, dpi=dpi)
+        build_gallery(events, categories, lambda fig: fig, tmp_path, title=title, dpi=dpi,
+                      captions=captions)
         with open(tmp_path) as fh:
             return fh.read()
     finally:
@@ -844,6 +950,7 @@ _PAGE_HTML = """<!doctype html>
       <select id="category_mode">
         <option value="compare">Compare two algorithms (pass/fail)</option>
         <option value="custom">Custom labels</option>
+        <option value="auto_flag">Auto-flag by &Delta;&phi;(MET, closest jet)</option>
       </select>
 
       <div id="compareFields">
@@ -869,6 +976,15 @@ _PAGE_HTML = """<!doctype html>
         <label for="custom_categories">Event id: label (one per line)</label>
         <textarea id="custom_categories" rows="6" placeholder="1023: anomalous&#10;1044: anomalous"></textarea>
         <div class="field-note">Any free-text label works -- every distinct one becomes a filter tab.</div>
+      </div>
+
+      <div id="autoFlagFields" class="hidden">
+        <label for="flag_event_list">Event range to scan</label>
+        <textarea id="flag_event_list" rows="2" placeholder="e.g. 1-200 or 1, 2, 4-10"></textarea>
+        <div class="field-note">Comma/space-separated; "a-b" expands to an inclusive range. Every event is loaded and scanned, so keep it under the 300-event cap.</div>
+        <label for="flag_threshold">Flag threshold [rad]</label>
+        <input type="number" id="flag_threshold" value="0.5" step="0.05" min="0">
+        <div class="field-note">Events with &Delta;&phi;(MET, closest jet) above this ("off-axis" MET, not pointing near any jet) are labelled "flagged"; events with no MET or no jets are skipped. Needs an event-level loader (not Vertex display).</div>
       </div>
 
       <label for="gallery_title">Gallery title</label>
@@ -1016,6 +1132,7 @@ function updateCategoryFields() {
   var mode = document.getElementById("category_mode").value;
   toggle("compareFields", mode === "compare");
   toggle("customFields", mode === "custom");
+  toggle("autoFlagFields", mode === "auto_flag");
 }
 
 document.getElementById("g_loader").addEventListener("change", populateGalleryDisplays);
@@ -1071,6 +1188,8 @@ populateManyDisplays();
    "custom_categories", "gallery_title", "gallery_dpi"].forEach(function(id) {
     if (params.has(id)) document.getElementById(id).value = params.get(id);
   });
+  if (params.has("event_list")) document.getElementById("flag_event_list").value = params.get("event_list");
+  if (params.has("flag_threshold")) document.getElementById("flag_threshold").value = params.get("flag_threshold");
   ["g_show_tracks", "g_include_large_r"].forEach(function(id) {
     if (params.has(id)) document.getElementById(id).checked = (params.get(id) === "true" || params.get(id) === "1");
   });
@@ -1143,6 +1262,8 @@ function buildGallery() {
     b_pass: document.getElementById("b_pass").value,
     b_fail: document.getElementById("b_fail").value,
     custom_categories: document.getElementById("custom_categories").value,
+    event_list: document.getElementById("flag_event_list").value,
+    flag_threshold: document.getElementById("flag_threshold").value,
     gallery_title: document.getElementById("gallery_title").value,
     dpi: document.getElementById("gallery_dpi").value,
   }, "galleryBtn");

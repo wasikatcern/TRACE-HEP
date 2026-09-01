@@ -341,6 +341,90 @@ def test_build_gallery_html_too_many_events_raises(monkeypatch):
                               "custom_categories": "1: a\n2: a\n3: a"})
 
 
+def test_dphi_wraps_around_correctly():
+    import math
+    from tracehep.webapp import _dphi
+
+    assert _dphi(0.0, 0.0) == 0.0
+    assert abs(_dphi(0.1, 6.2) - _dphi(0.1, 6.2 - 2 * math.pi)) < 1e-9
+    assert _dphi(0.0, math.pi) == pytest.approx(math.pi)
+    assert _dphi(-3.0, 3.0) == pytest.approx(2 * math.pi - 6.0)
+
+
+def test_min_dphi_met_jet_none_when_missing_met_or_jets():
+    from tracehep.models import Event, Jet, MissingET
+    from tracehep.webapp import _min_dphi_met_jet
+
+    assert _min_dphi_met_jet(Event(jets=[Jet(pt=50, eta=0.1, phi=0.2)], met=None)) is None
+    assert _min_dphi_met_jet(Event(jets=[], met=MissingET(pt=50, phi=0.2))) is None
+
+
+def test_min_dphi_met_jet_picks_the_closest_jet():
+    from tracehep.models import Event, Jet, MissingET
+    from tracehep.webapp import _min_dphi_met_jet
+
+    event = Event(
+        jets=[Jet(pt=50, eta=0.1, phi=0.0), Jet(pt=40, eta=0.2, phi=1.0)],
+        met=MissingET(pt=80, phi=0.9),
+    )
+    assert _min_dphi_met_jet(event) == pytest.approx(0.1)
+
+
+def test_build_gallery_html_auto_flag_categorizes_by_dphi_threshold(monkeypatch):
+    from tracehep.models import Event, Jet, MissingET
+    import tracehep.io.delphes as delphes_mod
+
+    # event 1: MET aligned with its jet (dphi ~ 0) -> not flagged
+    # event 2: MET opposite its jet (dphi ~ pi)    -> flagged
+    # event 3: no MET at all                        -> skipped
+    fake_events = {
+        1: Event(jets=[Jet(pt=50, eta=0.1, phi=0.0)], met=MissingET(pt=80, phi=0.05)),
+        2: Event(jets=[Jet(pt=50, eta=0.1, phi=0.0)], met=MissingET(pt=80, phi=3.14159)),
+        3: Event(jets=[Jet(pt=50, eta=0.1, phi=0.0)], met=None),
+    }
+
+    def fake_load_event(path, index, **kwargs):
+        return fake_events[index]
+
+    monkeypatch.setattr(delphes_mod, "load_event", fake_load_event)
+
+    from tracehep.webapp import _build_gallery_html
+
+    html = _build_gallery_html({
+        "loader": "delphes", "path": "whatever.root", "display": "polar",
+        "category_mode": "auto_flag", "event_list": "1-3", "flag_threshold": "0.5",
+    })
+    assert "not flagged" in html
+    assert "flagged (" in html
+    assert html.count("data:image/png;base64,") == 2  # event 3 skipped, not rendered
+    assert "1/2 events flagged" in html or "Auto-flagged review" in html
+
+
+def test_build_gallery_html_auto_flag_rejects_vertex_loader():
+    from tracehep.webapp import _build_gallery_html
+
+    with pytest.raises(ValueError, match="event-level loader"):
+        _build_gallery_html({
+            "loader": "vertex", "path": "whatever.root", "display": "vertices_plain",
+            "category_mode": "auto_flag", "event_list": "1-3",
+        })
+
+
+def test_build_gallery_html_auto_flag_raises_when_all_events_skipped(monkeypatch):
+    from tracehep.models import Event
+    import tracehep.io.delphes as delphes_mod
+
+    monkeypatch.setattr(delphes_mod, "load_event", lambda path, index, **kw: Event(event_number=index))
+
+    from tracehep.webapp import _build_gallery_html
+
+    with pytest.raises(ValueError, match="MET"):
+        _build_gallery_html({
+            "loader": "delphes", "path": "whatever.root", "display": "polar",
+            "category_mode": "auto_flag", "event_list": "1-2",
+        })
+
+
 def test_api_gallery_route_returns_html(client, monkeypatch):
     from tracehep.models import Event
     import tracehep.io.delphes as delphes_mod
