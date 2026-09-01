@@ -49,8 +49,9 @@
   .btn.ghost { background: var(--surface); color: var(--ink); }
   .btn.ghost:hover { background: var(--bg); text-decoration: none; }
   .install-box {
-    display: inline-flex; align-items: center; gap: 10px; background: #111318; color: #e8e8ea;
-    padding: 10px 16px; border-radius: 8px; font-size: 14px; margin: 0 auto;
+    display: inline-block; text-align: left; background: #111318; color: #e8e8ea;
+    padding: 12px 18px; border-radius: 8px; font-size: 13px; margin: 0 auto;
+    font-family: Menlo, Consolas, monospace; white-space: pre; overflow-x: auto; max-width: 100%;
   }
   .install-box .prompt { color: #6ee7b7; }
 
@@ -148,7 +149,8 @@
       <a class="btn primary" href="#see-it">See it in action</a>
       <a class="btn ghost" href="https://github.com/wasikatcern/TRACE-HEP">View on GitHub</a>
     </div>
-    <div class="install-box"><span class="prompt">$</span> pip install "trace-hep[gui]"</div>
+    <div class="install-box"><span class="prompt">$</span> pip install --index-url https://test.pypi.org/simple/ \
+    --extra-index-url https://pypi.org/simple/ "trace-hep[gui,delphes]"</div>
   </div>
 </section>
 
@@ -249,8 +251,9 @@
     </p>
     <ol class="steps">
       <li>
-        <p>Install the package with the GUI extra:</p>
-        <pre>pip install "trace-hep[gui]"</pre>
+        <p>Install the package (only on TestPyPI for now, so both index flags are needed):</p>
+        <pre>pip install --index-url https://test.pypi.org/simple/ \
+    --extra-index-url https://pypi.org/simple/ "trace-hep[gui,delphes]"</pre>
       </li>
       <li>
         <p>Launch the viewer -- it opens in your browser automatically:</p>
