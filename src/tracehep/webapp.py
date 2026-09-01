@@ -17,12 +17,18 @@ script needed:
   ``both_pass``/``both_fail``/disagreement 4-way split via
   :func:`tracehep.gallery.compare_pass_fail`), free-text custom labels
   (for an anomaly-detection bucket, say), or **auto-flag**: give it an
-  event range (e.g. ``1-200``) and a threshold, and it loads every event
-  in the range, computes Delta-phi(MET, closest jet) itself, and sorts
-  events into "flagged"/"not flagged" with no pass/fail list to prepare
-  by hand -- the same off-axis-MET diagnostic developed in the
-  accompanying paper's debugging case study, now a real, scriptless GUI
-  feature rather than a one-off analysis script.
+  event range (e.g. ``1-200``), pick one of eleven built-in criteria
+  (Delta-phi(MET, closest jet); the standard SUSY-style min-Delta-phi
+  among the leading 4 jets; MET/H_T; MET; H_T; jet/b-jet/lepton
+  multiplicity; leading-jet p_T; dijet back-to-back deviation; or max
+  displaced-track |d0|, an LLP signature), and a threshold with an
+  above/below direction, and it loads every event in the range, computes
+  the metric itself, and sorts events into "flagged"/"not flagged" with
+  no pass/fail list to prepare by hand -- the same off-axis-MET
+  diagnostic developed in the accompanying paper's debugging case study,
+  generalized to a small library of standard HEP event-selection
+  variables, all as a real, scriptless GUI feature rather than a
+  one-off analysis script (see :data:`_FLAG_CRITERIA` for the full list).
 
 Covers every loader tracehep ships: Delphes, flat-ntuple, ATLAS Open Data,
 CMS Open Data, and one unified "Vertex display" loader that auto-detects
@@ -305,14 +311,133 @@ def _dphi(phi1, phi2):
     return min(d, 2 * math.pi - d)
 
 
-def _min_dphi_met_jet(event):
-    """Smallest |Δφ(MET, jet)| over every jet in the event, or ``None`` if
-    the event has no MET or no jets -- auto-flagging needs both, the same
-    diagnostic used throughout the accompanying paper's debugging case
-    study."""
-    if event.met is None or not event.jets:
-        return None
-    return min(_dphi(event.met.phi, j.phi) for j in event.jets)
+def _leading(objs, n=None):
+    """Objects sorted by descending pT, optionally truncated to the
+    leading ``n``."""
+    ordered = sorted(objs, key=lambda o: -o.pt)
+    return ordered[:n] if n is not None else ordered
+
+
+# Every auto-flag criterion: a metric computed from one Event, plus enough
+# metadata to render the GUI control and a readable category label. Each
+# ``compute`` returns None when the metric can't be evaluated for a given
+# event (missing MET, too few jets, no track collection, ...) -- such
+# events are skipped from the gallery entirely, the same as the original
+# Δφ(MET, closest jet) criterion, rather than being miscategorized.
+_FLAG_CRITERIA = {
+    "dphi_met_jet": {
+        "label": "Δφ(MET, closest jet)",
+        "unit": "rad",
+        "default_threshold": 0.5,
+        "default_direction": "above",
+        "needs": "MET and ≥ 1 jet",
+        "compute": lambda ev: (
+            None if ev.met is None or not ev.jets
+            else min(_dphi(ev.met.phi, j.phi) for j in ev.jets)
+        ),
+    },
+    "min_dphi_leading4": {
+        "label": "min Δφ(MET, jet) among leading 4 jets",
+        "unit": "rad",
+        "default_threshold": 0.4,
+        "default_direction": "below",
+        "needs": "MET and ≥ 1 jet",
+        "compute": lambda ev: (
+            None if ev.met is None or not ev.jets
+            else min(_dphi(ev.met.phi, j.phi) for j in _leading(ev.jets, 4))
+        ),
+    },
+    "met_over_ht": {
+        "label": "MET / H_T (scalar sum jet p_T)",
+        "unit": "",
+        "default_threshold": 0.3,
+        "default_direction": "above",
+        "needs": "MET and ≥ 1 jet",
+        "compute": lambda ev: (
+            None if ev.met is None or not ev.jets or sum(j.pt for j in ev.jets) <= 0
+            else ev.met.pt / sum(j.pt for j in ev.jets)
+        ),
+    },
+    "met_pt": {
+        "label": "MET",
+        "unit": "GeV",
+        "default_threshold": 200.0,
+        "default_direction": "above",
+        "needs": "MET",
+        "compute": lambda ev: None if ev.met is None else ev.met.pt,
+    },
+    "ht": {
+        "label": "H_T (scalar sum jet p_T)",
+        "unit": "GeV",
+        "default_threshold": 500.0,
+        "default_direction": "above",
+        "needs": "≥ 1 jet",
+        "compute": lambda ev: None if not ev.jets else sum(j.pt for j in ev.jets),
+    },
+    "n_jets": {
+        "label": "Number of jets",
+        "unit": "",
+        "default_threshold": 6.0,
+        "default_direction": "above",
+        "needs": "always computable",
+        "compute": lambda ev: float(len(ev.jets)),
+    },
+    "n_bjets": {
+        "label": "Number of b-tagged jets",
+        "unit": "",
+        "default_threshold": 2.0,
+        "default_direction": "above",
+        "needs": "always computable",
+        "compute": lambda ev: float(len(ev.bjets)),
+    },
+    "leading_jet_pt": {
+        "label": "Leading jet p_T",
+        "unit": "GeV",
+        "default_threshold": 300.0,
+        "default_direction": "above",
+        "needs": "≥ 1 jet",
+        "compute": lambda ev: None if not ev.jets else max(j.pt for j in ev.jets),
+    },
+    "dijet_dphi_balance": {
+        "label": "|π − Δφ(jet1, jet2)| (deviation from back-to-back)",
+        "unit": "rad",
+        "default_threshold": 0.5,
+        "default_direction": "above",
+        "needs": "≥ 2 jets",
+        "compute": lambda ev: (
+            None if len(ev.jets) < 2
+            else abs(math.pi - _dphi(_leading(ev.jets, 2)[0].phi, _leading(ev.jets, 2)[1].phi))
+        ),
+    },
+    "max_track_d0": {
+        "label": "Max |d0| among tracks (displaced-track / LLP signature)",
+        "unit": "mm",
+        "default_threshold": 1.0,
+        "default_direction": "above",
+        "needs": "≥ 1 track (Delphes/calo-timing only)",
+        "compute": lambda ev: None if not ev.tracks else max(abs(t.d0) for t in ev.tracks),
+    },
+    "n_leptons": {
+        "label": "Number of leptons (muons + electrons)",
+        "unit": "",
+        "default_threshold": 2.0,
+        "default_direction": "above",
+        "needs": "always computable",
+        "compute": lambda ev: float(len(ev.leptons)),
+    },
+}
+
+
+def _flag_metric(criterion, event):
+    """Compute the named auto-flag criterion's metric for one event, or
+    raise a clear error for an unknown criterion name."""
+    spec = _FLAG_CRITERIA.get(criterion)
+    if spec is None:
+        raise ValueError(
+            f"unknown auto-flag criterion {criterion!r}; choose one of: "
+            f"{', '.join(sorted(_FLAG_CRITERIA))}"
+        )
+    return spec["compute"](event)
 
 
 _MAX_GALLERY_EVENTS = 300
@@ -380,13 +505,24 @@ def _build_gallery_html(payload):
     captions = None
 
     if category_mode == "auto_flag":
+        criterion = payload.get("flag_criterion") or "dphi_met_jet"
+        spec = _FLAG_CRITERIA.get(criterion)
+        if spec is None:
+            raise ValueError(
+                f"unknown auto-flag criterion {criterion!r}; choose one of: "
+                f"{', '.join(sorted(_FLAG_CRITERIA))}"
+            )
         if payload.get("loader") == "vertex":
             raise ValueError(
-                "Auto-flagging by Δφ(MET, closest jet) needs an event-level loader "
+                f"Auto-flagging by {spec['label']} needs an event-level loader "
                 "(Delphes, flat-ntuple, ATLAS/CMS Open Data, or a hand-built event) -- the "
-                "Vertex display loader has no jets or MET to compute it from."
+                "Vertex display loader has no jets, leptons, or MET to compute it from."
             )
-        threshold = float(payload.get("flag_threshold") or 0.5)
+        threshold = float(payload.get("flag_threshold") if payload.get("flag_threshold") not in (None, "")
+                           else spec["default_threshold"])
+        direction = payload.get("flag_direction") or spec["default_direction"]
+        if direction not in ("above", "below"):
+            raise ValueError(f"flag_direction must be 'above' or 'below', got {direction!r}")
         event_ids = _parse_id_range_list(payload.get("event_list"))
         if not event_ids:
             raise ValueError(
@@ -399,6 +535,8 @@ def _build_gallery_html(payload):
                 f"request). Narrow the range, or use tracehep directly from a script for larger scans."
             )
 
+        unit_suffix = f" {spec['unit']}" if spec["unit"] else ""
+        cmp_symbol = ">" if direction == "above" else "<"
         events, categories, captions = {}, {}, {}
         skipped = 0
         for eid in event_ids:
@@ -407,25 +545,26 @@ def _build_gallery_html(payload):
             kind, obj = _load_object(per_event_payload)
             if kind != "event":
                 raise ValueError("auto-flagging requires an event-level loader")
-            dphi = _min_dphi_met_jet(obj)
-            if dphi is None:
+            value = _flag_metric(criterion, obj)
+            if value is None:
                 skipped += 1
                 continue
+            is_flagged = (value > threshold) if direction == "above" else (value < threshold)
             show_tracks, d0_displaced_mm = _event_display_kwargs(per_event_payload)
             events[eid] = _make_event_fig(obj, payload["display"], show_tracks=show_tracks,
                                            d0_displaced_mm=d0_displaced_mm)
-            categories[eid] = (f"flagged (Δφ>{threshold:g} rad)" if dphi > threshold
-                                else "not flagged")
-            captions[eid] = f"Δφ(MET, closest jet) = {dphi:.3f} rad"
+            categories[eid] = (f"flagged ({spec['label']} {cmp_symbol} {threshold:g}{unit_suffix})"
+                                if is_flagged else "not flagged")
+            captions[eid] = f"{spec['label']} = {value:.3f}{unit_suffix}"
 
         if not categories:
             raise ValueError(
-                f"None of the {len(event_ids)} scanned event(s) had both MET and at least one "
-                f"jet, so Δφ(MET, closest jet) couldn't be computed for any of them."
+                f"None of the {len(event_ids)} scanned event(s) had enough information to "
+                f"compute {spec['label']} (needs {spec['needs']})."
             )
         n_flagged = sum(1 for c in categories.values() if c.startswith("flagged"))
-        default_title = (f"Auto-flagged review ({n_flagged}/{len(categories)} events flagged"
-                          f"{f', {skipped} skipped (no MET/jets)' if skipped else ''})")
+        skip_note = f", {skipped} skipped ({spec['needs']} not available)" if skipped else ""
+        default_title = f"Auto-flagged review ({n_flagged}/{len(categories)} events flagged{skip_note})"
     elif category_mode == "list":
         categories = {eid: "event" for eid in _parse_id_range_list(payload.get("event_list"))}
         default_title = "TRACE Failure-Mode Review"
@@ -982,9 +1121,25 @@ _PAGE_HTML = """<!doctype html>
         <label for="flag_event_list">Event range to scan</label>
         <textarea id="flag_event_list" rows="2" placeholder="e.g. 1-200 or 1, 2, 4-10"></textarea>
         <div class="field-note">Comma/space-separated; "a-b" expands to an inclusive range. Every event is loaded and scanned, so keep it under the 300-event cap.</div>
-        <label for="flag_threshold">Flag threshold [rad]</label>
-        <input type="number" id="flag_threshold" value="0.5" step="0.05" min="0">
-        <div class="field-note">Events with &Delta;&phi;(MET, closest jet) above this ("off-axis" MET, not pointing near any jet) are labelled "flagged"; events with no MET or no jets are skipped. Needs an event-level loader (not Vertex display).</div>
+
+        <label for="flag_criterion">Flag criterion</label>
+        <select id="flag_criterion"></select>
+        <div class="field-note" id="flag_criterion_needs"></div>
+
+        <div class="builder-row" style="align-items:flex-end;gap:8px;margin-top:8px;">
+          <div style="flex:1;">
+            <label for="flag_direction" style="margin:0 0 5px 0;">Flag when</label>
+            <select id="flag_direction">
+              <option value="above">above threshold</option>
+              <option value="below">below threshold</option>
+            </select>
+          </div>
+          <div style="flex:1;">
+            <label for="flag_threshold" style="margin:0 0 5px 0;">Threshold <span id="flag_threshold_unit"></span></label>
+            <input type="number" id="flag_threshold" step="any" style="width:100%;">
+          </div>
+        </div>
+        <div class="field-note">Events where the criterion can't be computed (e.g. no MET, no tracks) are skipped, not miscategorized. Needs an event-level loader (not Vertex display).</div>
       </div>
 
       <label for="gallery_title">Gallery title</label>
@@ -1135,10 +1290,49 @@ function updateCategoryFields() {
   toggle("autoFlagFields", mode === "auto_flag");
 }
 
+// Mirrors tracehep.webapp._FLAG_CRITERIA (server-side is authoritative and
+// re-validates independently) -- just enough here to populate the dropdown
+// and pre-fill a sensible threshold/direction/help text per criterion.
+var FLAG_CRITERIA = [
+  ["dphi_met_jet", "Δφ(MET, closest jet)", "rad", 0.5, "above", "MET and ≥ 1 jet"],
+  ["min_dphi_leading4", "min Δφ(MET, jet) among leading 4 jets", "rad", 0.4, "below", "MET and ≥ 1 jet"],
+  ["met_over_ht", "MET / H_T (scalar sum jet p_T)", "", 0.3, "above", "MET and ≥ 1 jet"],
+  ["met_pt", "MET", "GeV", 200, "above", "MET"],
+  ["ht", "H_T (scalar sum jet p_T)", "GeV", 500, "above", "≥ 1 jet"],
+  ["n_jets", "Number of jets", "", 6, "above", "always computable"],
+  ["n_bjets", "Number of b-tagged jets", "", 2, "above", "always computable"],
+  ["leading_jet_pt", "Leading jet p_T", "GeV", 300, "above", "≥ 1 jet"],
+  ["dijet_dphi_balance", "|π − Δφ(jet1, jet2)| (deviation from back-to-back)", "rad", 0.5, "above", "≥ 2 jets"],
+  ["max_track_d0", "Max |d0| among tracks (displaced-track / LLP signature)", "mm", 1.0, "above", "≥ 1 track (Delphes/calo-timing only)"],
+  ["n_leptons", "Number of leptons (muons + electrons)", "", 2, "above", "always computable"],
+];
+
+function populateFlagCriteria() {
+  var sel = document.getElementById("flag_criterion");
+  FLAG_CRITERIA.forEach(function(c) {
+    var opt = document.createElement("option");
+    opt.value = c[0]; opt.textContent = c[1] + (c[2] ? " [" + c[2] + "]" : "");
+    sel.appendChild(opt);
+  });
+  updateFlagCriterionDefaults();
+}
+
+function updateFlagCriterionDefaults() {
+  var key = document.getElementById("flag_criterion").value;
+  var c = FLAG_CRITERIA.filter(function(x) { return x[0] === key; })[0];
+  if (!c) return;
+  document.getElementById("flag_threshold").value = c[3];
+  document.getElementById("flag_direction").value = c[4];
+  document.getElementById("flag_threshold_unit").textContent = c[2] ? "[" + c[2] + "]" : "";
+  document.getElementById("flag_criterion_needs").textContent = "Needs: " + c[5] + ".";
+}
+
 document.getElementById("g_loader").addEventListener("change", populateGalleryDisplays);
 document.getElementById("category_mode").addEventListener("change", updateCategoryFields);
+document.getElementById("flag_criterion").addEventListener("change", updateFlagCriterionDefaults);
 populateGalleryDisplays();
 updateCategoryFields();
+populateFlagCriteria();
 
 document.getElementById("m_loader").addEventListener("change", populateManyDisplays);
 populateManyDisplays();
@@ -1189,6 +1383,8 @@ populateManyDisplays();
     if (params.has(id)) document.getElementById(id).value = params.get(id);
   });
   if (params.has("event_list")) document.getElementById("flag_event_list").value = params.get("event_list");
+  if (params.has("flag_criterion")) document.getElementById("flag_criterion").value = params.get("flag_criterion");
+  if (params.has("flag_direction")) document.getElementById("flag_direction").value = params.get("flag_direction");
   if (params.has("flag_threshold")) document.getElementById("flag_threshold").value = params.get("flag_threshold");
   ["g_show_tracks", "g_include_large_r"].forEach(function(id) {
     if (params.has(id)) document.getElementById(id).checked = (params.get(id) === "true" || params.get(id) === "1");
@@ -1263,6 +1459,8 @@ function buildGallery() {
     b_fail: document.getElementById("b_fail").value,
     custom_categories: document.getElementById("custom_categories").value,
     event_list: document.getElementById("flag_event_list").value,
+    flag_criterion: document.getElementById("flag_criterion").value,
+    flag_direction: document.getElementById("flag_direction").value,
     flag_threshold: document.getElementById("flag_threshold").value,
     gallery_title: document.getElementById("gallery_title").value,
     dpi: document.getElementById("gallery_dpi").value,

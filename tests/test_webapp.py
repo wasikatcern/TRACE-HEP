@@ -351,23 +351,77 @@ def test_dphi_wraps_around_correctly():
     assert _dphi(-3.0, 3.0) == pytest.approx(2 * math.pi - 6.0)
 
 
-def test_min_dphi_met_jet_none_when_missing_met_or_jets():
+def test_flag_metric_dphi_met_jet_none_when_missing_met_or_jets():
     from tracehep.models import Event, Jet, MissingET
-    from tracehep.webapp import _min_dphi_met_jet
+    from tracehep.webapp import _flag_metric
 
-    assert _min_dphi_met_jet(Event(jets=[Jet(pt=50, eta=0.1, phi=0.2)], met=None)) is None
-    assert _min_dphi_met_jet(Event(jets=[], met=MissingET(pt=50, phi=0.2))) is None
+    assert _flag_metric("dphi_met_jet", Event(jets=[Jet(pt=50, eta=0.1, phi=0.2)], met=None)) is None
+    assert _flag_metric("dphi_met_jet", Event(jets=[], met=MissingET(pt=50, phi=0.2))) is None
 
 
-def test_min_dphi_met_jet_picks_the_closest_jet():
+def test_flag_metric_dphi_met_jet_picks_the_closest_jet():
     from tracehep.models import Event, Jet, MissingET
-    from tracehep.webapp import _min_dphi_met_jet
+    from tracehep.webapp import _flag_metric
 
     event = Event(
         jets=[Jet(pt=50, eta=0.1, phi=0.0), Jet(pt=40, eta=0.2, phi=1.0)],
         met=MissingET(pt=80, phi=0.9),
     )
-    assert _min_dphi_met_jet(event) == pytest.approx(0.1)
+    assert _flag_metric("dphi_met_jet", event) == pytest.approx(0.1)
+
+
+def test_flag_metric_unknown_criterion_raises():
+    from tracehep.models import Event
+    from tracehep.webapp import _flag_metric
+
+    with pytest.raises(ValueError, match="unknown auto-flag criterion"):
+        _flag_metric("not_a_real_criterion", Event())
+
+
+@pytest.mark.parametrize("criterion,event_kwargs,expected", [
+    ("met_over_ht", dict(jets=[{"pt": 100}, {"pt": 100}], met_pt=50), 0.25),
+    ("met_pt", dict(jets=[], met_pt=123.0), 123.0),
+    ("ht", dict(jets=[{"pt": 30}, {"pt": 70}]), 100.0),
+    ("n_jets", dict(jets=[{"pt": 10}, {"pt": 20}, {"pt": 30}]), 3.0),
+    ("n_bjets", dict(jets=[{"pt": 10, "btag": True}, {"pt": 20, "btag": False}]), 1.0),
+    ("leading_jet_pt", dict(jets=[{"pt": 30}, {"pt": 90}, {"pt": 10}]), 90.0),
+])
+def test_flag_metric_kinematic_criteria(criterion, event_kwargs, expected):
+    from tracehep.models import Event, Jet, MissingET
+    from tracehep.webapp import _flag_metric
+
+    jets = [Jet(pt=j["pt"], eta=0.0, phi=0.0, btag=j.get("btag", False)) for j in event_kwargs["jets"]]
+    met = MissingET(pt=event_kwargs["met_pt"], phi=0.0) if "met_pt" in event_kwargs else None
+    event = Event(jets=jets, met=met)
+    assert _flag_metric(criterion, event) == pytest.approx(expected)
+
+
+def test_flag_metric_dijet_dphi_balance_needs_two_jets():
+    from tracehep.models import Event, Jet
+    from tracehep.webapp import _flag_metric
+    import math
+
+    assert _flag_metric("dijet_dphi_balance", Event(jets=[Jet(pt=50, eta=0, phi=0)])) is None
+    event = Event(jets=[Jet(pt=90, eta=0, phi=0.0), Jet(pt=50, eta=0, phi=math.pi / 2)])
+    assert _flag_metric("dijet_dphi_balance", event) == pytest.approx(math.pi / 2)
+
+
+def test_flag_metric_max_track_d0_none_without_tracks():
+    from tracehep.models import Event, Track
+    from tracehep.webapp import _flag_metric
+
+    assert _flag_metric("max_track_d0", Event(tracks=[])) is None
+    event = Event(tracks=[Track(pt=1, eta=0, phi=0, d0=0.5), Track(pt=1, eta=0, phi=0, d0=-2.3)])
+    assert _flag_metric("max_track_d0", event) == pytest.approx(2.3)
+
+
+def test_flag_metric_n_leptons_counts_muons_and_electrons():
+    from tracehep.models import Event, Lepton
+    from tracehep.webapp import _flag_metric
+
+    event = Event(muons=[Lepton(pt=1, eta=0, phi=0, flavor="muon")],
+                   electrons=[Lepton(pt=1, eta=0, phi=0, flavor="electron")] * 2)
+    assert _flag_metric("n_leptons", event) == pytest.approx(3.0)
 
 
 def test_build_gallery_html_auto_flag_categorizes_by_dphi_threshold(monkeypatch):
@@ -423,6 +477,31 @@ def test_build_gallery_html_auto_flag_raises_when_all_events_skipped(monkeypatch
             "loader": "delphes", "path": "whatever.root", "display": "polar",
             "category_mode": "auto_flag", "event_list": "1-2",
         })
+
+
+def test_build_gallery_html_auto_flag_supports_other_criteria_and_below_direction(monkeypatch):
+    from tracehep.models import Event, Jet
+    import tracehep.io.delphes as delphes_mod
+
+    # event 1: 5 jets -> below the threshold of 3 -> not flagged
+    # event 2: 1 jet  -> below the threshold of 3 -> flagged
+    fake_events = {
+        1: Event(jets=[Jet(pt=10, eta=0, phi=0)] * 5),
+        2: Event(jets=[Jet(pt=10, eta=0, phi=0)] * 1),
+    }
+    monkeypatch.setattr(delphes_mod, "load_event", lambda path, index, **kw: fake_events[index])
+
+    from tracehep.webapp import _build_gallery_html
+
+    html = _build_gallery_html({
+        "loader": "delphes", "path": "whatever.root", "display": "polar",
+        "category_mode": "auto_flag", "event_list": "1-2",
+        "flag_criterion": "n_jets", "flag_threshold": "3", "flag_direction": "below",
+    })
+    assert "Number of jets" in html
+    assert "not flagged" in html
+    assert "flagged (" in html
+    assert html.count("data:image/png;base64,") == 2  # n_jets is always computable, nothing skipped
 
 
 def test_api_gallery_route_returns_html(client, monkeypatch):

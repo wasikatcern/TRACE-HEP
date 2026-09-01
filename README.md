@@ -412,10 +412,14 @@ gallery right there in an embedded frame (up to 300 events per request):
   category -- describe them either as two algorithms' pass/fail event-id
   lists (built into the usual `both_pass`/`both_fail`/disagreement 4-way
   split), as free-text custom labels (`1023: anomalous`, one per line, for
-  an anomaly-detection bucket), or **auto-flag by Δφ(MET, closest jet)**:
-  give it an event range (`1-200`) and a threshold, and it loads every
-  event itself, computes the angle, and sorts them into
-  flagged/not-flagged -- no pass/fail list to build by hand.
+  an anomaly-detection bucket), or **auto-flag by a built-in criterion**:
+  give it an event range (`1-200`), pick one of eleven metrics --
+  Δφ(MET, closest jet); the standard SUSY-style min-Δφ among the leading 4
+  jets; MET/H_T; MET; H_T; jet/b-jet/lepton count; leading-jet p_T; dijet
+  back-to-back deviation; or max displaced-track |d0| (an LLP signature)
+  -- a threshold, and an above/below direction, and it loads every event
+  itself, computes the metric, and sorts them into flagged/not-flagged --
+  no pass/fail list to build by hand.
 
 Every gallery, whether built in either tab or with `tracehep.gallery`
 directly, has a **"Download all (visible)"** button next to the filter
